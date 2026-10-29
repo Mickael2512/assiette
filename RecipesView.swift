@@ -31,7 +31,9 @@ struct RecipeCard: View {
 
 struct RecipesView: View {
     @Environment(Store.self) var store
-    @State private var filter = 0, q = "", importing = false
+    @State private var filter = 0
+    @State private var q = ""
+    @State private var importing = false
     var shown: [Recipe] {
         store.recipes.filter { (filter == 0 || $0.cooked > 0) && (q.isEmpty || $0.title.localizedCaseInsensitiveContains(q)) }
             .sorted { filter == 1 ? ($0.lastCooked ?? .distantPast) > ($1.lastCooked ?? .distantPast) : $0.created > $1.created }
@@ -65,7 +67,9 @@ struct RecipeDetail: View {
     let id: UUID
     @Environment(Store.self) var store
     @Environment(\.dismiss) var dismiss
-    @State private var renaming = false, deleting = false, name = ""
+    @State private var renaming = false
+    @State private var deleting = false
+    @State private var name = ""
 
     var body: some View {
         if let r = store.recipes.first(where: { $0.id == id }) { content(r) } else { Color.clear.onAppear { dismiss() } }
@@ -133,7 +137,11 @@ struct RecipeDetail: View {
 struct ImportView: View {
     @Environment(Store.self) var store
     @Environment(\.dismiss) var dismiss
-    @State private var mode = 0, text = "", meal = Meal.dinner, busy = false, err = ""
+    @State private var mode = 0
+    @State private var text = ""
+    @State private var meal = Meal.dinner
+    @State private var busy = false
+    @State private var err = ""
     @State private var photo: PhotosPickerItem?
     @State private var cam = false
 

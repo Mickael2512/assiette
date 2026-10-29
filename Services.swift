@@ -90,7 +90,7 @@ enum Importer {
         let d = (try? await URLSession.shared.data(for: r))?.0 ?? Data()
         let html = String(decoding: d, as: UTF8.self)
         var text = "Titre : \(meta("og:title", html))\nDescription : \(meta("og:description", html))\n"
-        for b in rx("<script[^>]*application/ld\\+json[^>]*>(.*?)</script>", html).prefix(3) { text += "\nJSON-LD : " + b.prefix(6000) }
+        for b in rx("<script[^>]*application/ld\\+json[^>]*>(.*?)</script>", html).prefix(3) { text += "\nJSON-LD : " + String(b.prefix(6000)) }
         var img = meta("og:image", html)
         if url.host?.contains("tiktok.com") == true,
            let o = URL(string: "https://www.tiktok.com/oembed?url=" + (s.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? s)),

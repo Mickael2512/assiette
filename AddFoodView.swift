@@ -6,11 +6,19 @@ struct AddFoodView: View {
     let meal: Meal, day: Date
     @Environment(Store.self) var store
     @Environment(\.dismiss) var dismiss
-    @State private var mode = 0, text = "", busy = false, err = ""
-    @State private var cands: [Cand] = [], hits: [OFFResult] = []
-    @State private var picked: OFFResult?, grams = "100", photo: PhotosPickerItem?
-    @State private var scanning = false, cam = false
-    @State private var searchTask: Task<Void, Never>?
+    @State private var mode = 0
+    @State private var text = ""
+    @State private var busy = false
+    @State private var err = ""
+    @State private var cands: [Cand] = []
+    @State private var hits: [OFFResult] = []
+    @State private var picked: OFFResult?
+    @State private var grams = "100"
+    @State private var photo: PhotosPickerItem?
+    @State private var scanning = false
+    @State private var cam = false
+    @State private var searchTask: Task<Void
+    @State private var Never>?
 
     func add(_ c: Cand) {
         store.add(Entry(date: day, meal: meal, name: c.name, detail: c.detail, m: c.m, source: c.source)); dismiss()

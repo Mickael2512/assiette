@@ -3,7 +3,7 @@ import Charts
 import UniformTypeIdentifiers
 
 struct DayKcal: Identifiable { let id: Date; let kcal: Double }
-struct Slice: Identifiable { let id: String; let v: Double }
+struct MacroSlice: Identifiable { let id: String; let v: Double }
 
 struct HistoryView: View {
     @Environment(Store.self) var store
@@ -14,9 +14,9 @@ struct HistoryView: View {
             return DayKcal(id: d, kcal: store.total(d).kcal)
         }
     }
-    var split: [Slice] {
+    var split: [MacroSlice] {
         let t = week.reduce(Macros()) { $0 + store.total($1.id) }
-        return [Slice(id: "Protéines", v: t.p), Slice(id: "Lipides", v: t.l), Slice(id: "Glucides", v: t.g)]
+        return [MacroSlice(id: "Protéines", v: t.p), MacroSlice(id: "Lipides", v: t.l), MacroSlice(id: "Glucides", v: t.g)]
     }
     var body: some View {
         NavigationStack {
@@ -73,7 +73,9 @@ struct SettingsView: View {
     @AppStorage("geminiKey") private var gem = ""
     @AppStorage("geminiModel") private var model = "gemini-2.5-flash"
     @AppStorage("usdaKey") private var usda = ""
-    @State private var wipe = false, importing = false, nCiqual = Ciqual.rows.count
+    @State private var wipe = false
+    @State private var importing = false
+    @State private var nCiqual = Ciqual.rows.count
     var body: some View {
         @Bindable var s = store
         NavigationStack {
