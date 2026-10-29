@@ -1,0 +1,21 @@
+name: Build IPA
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: xcodegen generate
+      - run: |
+          xcodebuild -project Assiette.xcodeproj -scheme Assiette -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/Assiette.app Payload/
+          zip -r Assiette.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Assiette-ipa
+          path: Assiette.ipa
