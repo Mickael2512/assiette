@@ -1,0 +1,28 @@
+name: Debug build
+on: workflow_dispatch
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: xcodegen generate
+      - name: Build
+        run: |
+          set +e
+          xcodebuild -project Assiette.xcodeproj -scheme Assiette -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build > build.log 2>&1
+          code=$?
+          grep -E "error:" build.log | sort -u | head -15 > errors.txt
+          cat errors.txt >> $GITHUB_STEP_SUMMARY
+          while IFS= read -r l; do echo "::error::$l"; done < errors.txt
+          if [ $code -ne 0 ]; then exit 1; fi
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/Assiette.app Payload/
+          zip -r Assiette.ipa Payload
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-log-and-ipa
+          path: |
+            build.log
+            Assiette.ipa
