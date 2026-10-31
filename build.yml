@@ -10,11 +10,17 @@ jobs:
       - uses: actions/checkout@v4
       - run: brew install xcodegen
       - run: xcodegen generate
-      - run: |
-          xcodebuild -project Assiette.xcodeproj -scheme Assiette -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+      - name: Build
+        run: |
+          xcodebuild -project Assiette.xcodeproj -scheme Assiette -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build > build.log 2>&1 || { grep -E "error:" build.log | sort -u | head -10 | while IFS= read -r l; do echo "::error::$l"; done; exit 1; }
           mkdir Payload
           cp -R build/Build/Products/Release-iphoneos/Assiette.app Payload/
           zip -r Assiette.ipa Payload
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
       - uses: actions/upload-artifact@v4
         with:
           name: Assiette-ipa
