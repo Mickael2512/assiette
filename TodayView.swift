@@ -49,31 +49,42 @@ struct TodayView: View {
             }
         }
         .padding(18)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .card(24)
+    }
+
+    func mealHeader(_ m: Meal) -> some View {
+        HStack {
+            Label(m.title, systemImage: m.icon).foregroundStyle(m.color)
+            Spacer()
+            Text("\(Int(store.total(day, m).kcal)) kcal").foregroundStyle(.secondary)
+        }
+        .font(.headline)
+        .textCase(nil)
+    }
+
+    func entryRow(_ e: Entry) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(e.name).font(.body.weight(.medium))
+            Text(e.detail + "  " + e.m.line).font(.footnote).foregroundStyle(.secondary)
+        }
+    }
+
+    func mealSection(_ m: Meal) -> some View {
+        let items: [Entry] = store.list(day, m)
+        return Section {
+            ForEach(items) { e in entryRow(e) }
+                .onDelete { offsets in store.remove(offsets.map { items[$0].id }) }
+            Button { adding = m } label: { Label("Ajouter", systemImage: "plus.circle.fill") }
+        } header: {
+            mealHeader(m)
+        }
     }
 
     var body: some View {
         NavigationStack {
             List {
                 Section { summary.listRowBackground(Color.clear).listRowInsets(EdgeInsets()) }
-                ForEach(Meal.allCases) { m in
-                    let items = store.list(day, m)
-                    Section {
-                        ForEach(items) { e in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(e.name).font(.body.weight(.medium))
-                                Text("\(e.detail)  \(e.m.line)").font(.footnote).foregroundStyle(.secondary)
-                            }
-                        }.onDelete { store.remove($0.map { items[$0].id }) }
-                        Button { adding = m } label: { Label("Ajouter", systemImage: "plus.circle.fill") }
-                    } header: {
-                        HStack {
-                            Label(m.title, systemImage: m.icon).foregroundStyle(m.color)
-                            Spacer()
-                            Text("\(Int(store.total(day, m).kcal)) kcal").foregroundStyle(.secondary)
-                        }.font(.headline).textCase(nil)
-                    }
-                }
+                ForEach(Meal.allCases) { m in mealSection(m) }
             }
             .navigationTitle(Calendar.current.isDateInToday(day) ? "Aujourd’hui" : frDate(day, "EEEE d MMM"))
             .toolbar {

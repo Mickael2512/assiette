@@ -117,3 +117,9 @@ extension UIImage {
         return UIGraphicsImageRenderer(size: s, format: f).image { _ in draw(in: CGRect(origin: .zero, size: s)) }
     }
 }
+
+extension View {
+    func card(_ r: CGFloat = 22) -> some View {
+        background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: r, style: .continuous))
+    }
+}

@@ -82,7 +82,7 @@ struct RecipeDetail: View {
     func block<C: View>(_ t: String, @ViewBuilder _ c: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 10) { Text(t).font(.title3.bold()); c() }
             .frame(maxWidth: .infinity, alignment: .leading).padding(18)
-            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .card(22)
     }
     func content(_ r: Recipe) -> some View {
         ScrollView {

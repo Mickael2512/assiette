@@ -17,8 +17,7 @@ struct AddFoodView: View {
     @State private var photo: PhotosPickerItem?
     @State private var scanning = false
     @State private var cam = false
-    @State private var searchTask: Task<Void
-    @State private var Never>?
+    @State private var searchTask: Task<Void, Never>?
 
     func add(_ c: Cand) {
         store.add(Entry(date: day, meal: meal, name: c.name, detail: c.detail, m: c.m, source: c.source)); dismiss()
