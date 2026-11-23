@@ -8,6 +8,9 @@ struct MacroSlice: Identifiable { let id: String; let v: Double }
 struct HistoryView: View {
     @Environment(Store.self) var store
     var days: [Date] { Array(Set(store.entries.map { Calendar.current.startOfDay(for: $0.date) })).sorted(by: >) }
+    var weightMeasurements: [BodyMeasurement] {
+        store.bodyMeasurements.filter { $0.weightKg != nil }.sorted { $0.date < $1.date }
+    }
     var week: [DayKcal] {
         (0..<7).reversed().map { i in
             let d = Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: -i, to: Date())!)
@@ -21,9 +24,31 @@ struct HistoryView: View {
     var body: some View {
         NavigationStack {
             List {
-                if days.isEmpty {
-                    ContentUnavailableView("Rien pour l’instant", systemImage: "clock", description: Text("Vos repas apparaîtront ici, jour par jour."))
-                } else {
+                if days.isEmpty && store.bodyMeasurements.isEmpty {
+                    ContentUnavailableView("Rien pour l’instant", systemImage: "clock", description: Text("Vos repas et mesures corporelles apparaîtront ici."))
+                }
+                if weightMeasurements.isEmpty == false {
+                    Section("Évolution du poids") {
+                        Chart {
+                            ForEach(weightMeasurements) { measurement in
+                                if let weight = measurement.weightKg {
+                                    LineMark(x: .value("Date", measurement.date), y: .value("Poids", weight))
+                                        .interpolationMethod(.catmullRom)
+                                    PointMark(x: .value("Date", measurement.date), y: .value("Poids", weight))
+                                }
+                            }
+                        }
+                        .chartYAxisLabel("kg")
+                        .frame(height: 180)
+                        if let first = weightMeasurements.first?.weightKg,
+                           let latest = weightMeasurements.last?.weightKg {
+                            let delta = latest - first
+                            Text(String(format: "Évolution sur la période : %+.1f kg", delta))
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                if !days.isEmpty {
                     Section("Calories, 7 derniers jours") {
                         Chart {
                             ForEach(week) { w in
