@@ -117,7 +117,7 @@ struct AddFoodView: View {
                     Button(mode == 0 ? "Rechercher" : "Estimer", action: go).disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
                     if mode == 0 {
                         Button { scanning = true } label: { Label("Scanner un code-barres", systemImage: "barcode.viewfinder") }
-                            .disabled(!DataScannerViewController.isSupported)
+                            .disabled(!DataScannerViewController.isSupported || !DataScannerViewController.isAvailable)
                     }
                 }
                 if busy { HStack { ProgressView(); Text("Analyse…").foregroundStyle(.secondary) } }
@@ -161,8 +161,13 @@ struct AddFoodView: View {
                 searchTask = Task {
                     try? await Task.sleep(nanoseconds: 450_000_000)
                     guard !Task.isCancelled else { return }
-                    let off = (try? await FoodDB.search(q)) ?? []
-                    if !Task.isCancelled { hits = Ciqual.search(q) + off; cands = []; picked = nil }
+                    async let off = (try? await FoodDB.search(q)) ?? []
+                    async let usda = (try? await FoodDB.usda(q)) ?? []
+                    let results = Ciqual.search(q) + (await off) + (await usda)
+                    guard !Task.isCancelled else { return }
+                    hits = results
+                    cands = []
+                    picked = nil
                 }
             }
             .onChange(of: mode) { _, _ in photoStatus = ""; err = ""; hits = []; picked = nil }
