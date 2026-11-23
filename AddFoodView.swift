@@ -41,25 +41,49 @@ struct AddFoodView: View {
         }
     }
     func recognizePhoto(_ image: UIImage) async throws {
-        let predictions = try await OnDeviceFoodRecognition.recognize(image)
+        let analysis = try await FoodPhotoAI.analyze(image)
         cands = []
         hits = []
         picked = nil
-        guard let first = predictions.first else {
-            photoStatus = "Je n’ai pas identifié clairement d’aliment. Essayez une photo plus rapprochée, avec le plat bien visible."
-            return
+        text = analysis.dishName
+
+        var suggestions: [Cand] = []
+        var unmatched: [String] = []
+        for ingredient in analysis.ingredients {
+            var matches: [OFFResult] = []
+            for term in ([ingredient.name] + ingredient.searchTerms).prefix(5) {
+                matches.append(contentsOf: Ciqual.search(term))
+                if !matches.isEmpty { break }
+            }
+            guard let food = matches.first else {
+                unmatched.append(ingredient.name)
+                continue
+            }
+            let grams = min(2000, max(1, ingredient.estimatedGrams))
+            let confidence = Int((ingredient.confidence * 100).rounded())
+            let preparation = ingredient.preparation.isEmpty ? "" : " · " + ingredient.preparation
+            suggestions.append(Cand(
+                name: food.name,
+                detail: "\(Int(grams.rounded())) g estimés · confiance \(confidence)%\(preparation)",
+                m: food.per100.scaled(grams / 100),
+                source: "CIQUAL · estimation IA"
+            ))
         }
-        text = first.name
-        var local: [OFFResult] = []
-        for prediction in predictions.prefix(4) {
-            local.append(contentsOf: Ciqual.search(prediction.searchTerm))
+        cands = suggestions
+        var messages: [String] = []
+        if !analysis.uncertainties.isEmpty {
+            messages.append(contentsOf: analysis.uncertainties.prefix(3))
         }
-        var seen = Set<String>()
-        hits = local.filter { seen.insert($0.name).inserted }
-        if hits.isEmpty {
-            photoStatus = "L’iPhone reconnaît probablement : " + predictions.prefix(3).map(\.name).joined(separator: ", ") + ". Les calories ne sont pas déduites de l’image : importez CIQUAL pour obtenir des valeurs nutritionnelles hors ligne."
-        } else {
-            photoStatus = "Suggestions reconnues sur l’iPhone. Vérifiez l’aliment et choisissez la bonne entrée CIQUAL."
+        if !unmatched.isEmpty {
+            messages.append("À associer manuellement dans CIQUAL : " + unmatched.joined(separator: ", "))
+        }
+        let confidence = Int((analysis.overallConfidence * 100).rounded())
+        photoStatus = "Plat identifié : \(analysis.dishName) · confiance globale \(confidence)%. Les grammes sont estimés, pas pesés."
+        if !messages.isEmpty {
+            photoStatus += "\n" + messages.joined(separator: "\n")
+        }
+        if suggestions.isEmpty {
+            photoStatus += "\nAucun ingrédient n’a trouvé de correspondance CIQUAL. Importez la base CIQUAL 2025 ou corrigez les noms."
         }
     }
     func go() {
@@ -116,9 +140,9 @@ struct AddFoodView: View {
                             Text(photoStatus).font(.footnote).foregroundStyle(.secondary)
                         }
                     } header: {
-                        Text("Reconnaissance sur l’iPhone")
+                        Text("Analyse intelligente du plat")
                     } footer: {
-                        Text("Analyse locale, sans compte ni connexion. Vision tente d’isoler plusieurs objets de premier plan puis classe chaque zone et l’image entière. Cette segmentation reste générique : elle ne sépare pas les ingrédients fondus dans un plat composé et ne mesure pas les grammes. Vérifiez chaque suggestion et saisissez la quantité avant l’ajout.")
+                        Text("La photo est analysée par une IA multimodale sécurisée. Les ingrédients sont rapprochés de CIQUAL ; les macros proviennent de la base nutritionnelle. Les poids restent des estimations à vérifier avant validation.")
                     }
                 } else {
                     TextField(mode == 0 ? "Ex. yaourt grec, banane…" : "Nom exact ou approchant d’un aliment", text: $text).onSubmit(go)
