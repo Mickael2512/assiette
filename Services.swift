@@ -63,8 +63,8 @@ enum Importer {
     }
 
     static func meta(_ key: String, _ html: String) -> String {
-        let a = rx("<meta[^>]+(?:property|name)=\\"\(key)\\"[^>]*content=\\"([^\\"]*)\\"", html)
-        let b = rx("<meta[^>]+content=\\"([^\\"]*)\\"[^>]*(?:property|name)=\\"\(key)\\"", html)
+        let a = rx(#"<meta[^>]+(?:property|name)="\#(key)"[^>]*content="([^"]*)""#, html)
+        let b = rx(#"<meta[^>]+content="([^"]*)"[^>]*(?:property|name)="\#(key)""#, html)
         return (a.first ?? b.first ?? "")
             .replacingOccurrences(of: "&amp;", with: "&")
             .replacingOccurrences(of: "&quot;", with: "\\"")
@@ -151,7 +151,7 @@ enum Importer {
         }
         let html = String(decoding: data, as: UTF8.self)
         var recipe: [String: Any]?
-        for block in rx("<script[^>]*type=[\\"']application/ld\\+json[\\"'][^>]*>(.*?)</script>", html) {
+        for block in rx(#"<script[^>]*type=["']application/ld\+json["'][^>]*>(.*?)</script>"#, html) {
             guard let json = block.data(using: .utf8),
                   let object = try? JSONSerialization.jsonObject(with: json, options: [.fragmentsAllowed]),
                   let found = recipeObject(object) else { continue }
