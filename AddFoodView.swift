@@ -170,8 +170,7 @@ struct AddFoodView: View {
                     try? await Task.sleep(nanoseconds: 450_000_000)
                     guard !Task.isCancelled else { return }
                     async let off = (try? await FoodDB.search(q)) ?? []
-                    async let usda = (try? await FoodDB.usda(q)) ?? []
-                    let results = Ciqual.search(q) + (await off) + (await usda)
+                    let results = Ciqual.search(q) + (await off)
                     guard !Task.isCancelled else { return }
                     hits = results
                     cands = []
