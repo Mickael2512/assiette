@@ -190,11 +190,12 @@ struct SettingsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section {
+                    Link("Télécharger la table officielle Ciqual 2025", destination: URL(string: "https://entrepot.recherche.data.gouv.fr/dataset.xhtml?persistentId=doi%3A10.57745%2FRDMHWY")!)
                     Button("Importer le fichier CIQUAL (.csv)") { importing = true }
                     Text(nCiqual > 0 ? "CIQUAL chargé : \(nCiqual) aliments" : "CIQUAL non chargé").font(.footnote).foregroundStyle(.secondary)
                     if !ciqualError.isEmpty { Text(ciqualError).font(.footnote).foregroundStyle(.red) }
                 } header: { Text("Bases alimentaires") } footer: {
-                    Text("Open Food Facts et USDA sont interrogées en ligne. Pour CIQUAL, téléchargez la table sur ciqual.anses.fr et enregistrez-la en CSV.")
+                    Text("CIQUAL 2025 est la base française de référence. Exportez l’onglet « composition nutritionnelle » en CSV UTF-8 avant l’import. Données : Anses, Table de composition nutritionnelle des aliments Ciqual 2025 — Licence Ouverte 2.0.")
                 }
                 Section("Données") { Button("Effacer tout le journal", role: .destructive) { wipe = true } }
             }
