@@ -155,3 +155,12 @@ Sources :
 - Dépôt officiel FoodSeg103 et licence du code : https://github.com/LARC-CMU-SMU/FoodSeg103-Benchmark-v1
 - Fiche de distribution FoodSeg103 (source des images et licence déclarée) : https://huggingface.co/datasets/XiaoYuYa/FoodSeg103
 - FoodSAM et licence annoncée pour le modèle : https://github.com/jamesjg/FoodSAM
+
+
+## Prototype Vision multi-instance ajouté
+
+Le pipeline iOS tente maintenant une segmentation générique des objets de premier plan avec `VNGenerateForegroundInstanceMaskRequest` (iOS 17), puis classe chaque masque isolé avec `VNClassifyImageRequest`. Une classification de l'image complète est ajoutée en complément et en repli. Cela améliore la possibilité de repérer plusieurs objets distincts dans une même photo, sans transformer le classifieur générique en modèle spécialisé alimentaire : une assiette composée peut rester un seul objet visuel. Aucun poids, volume ou macro n'est déduit de la géométrie du masque. La quantité reste à confirmer par l'utilisateur.
+
+Documentation Apple :
+- https://developer.apple.com/documentation/vision/generateforegroundinstancemaskrequest
+- https://developer.apple.com/documentation/vision/vninstancemaskobservation/generatemaskedimage(ofinstances:from:croppedtoinstancesextent:)
