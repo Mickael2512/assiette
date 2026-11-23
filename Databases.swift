@@ -83,9 +83,36 @@ enum OnDeviceFoodRecognition {
         }
 
         let raw = try await Task.detached(priority: .userInitiated) { () throws -> [(String, Float)] in
-            let request = VNClassifyImageRequest()
-            try VNImageRequestHandler(data: data, options: [:]).perform([request])
-            return (request.results ?? []).prefix(15).map { ($0.identifier, $0.confidence) }
+            let handler = VNImageRequestHandler(data: data, options: [:])
+            var predictions: [(String, Float)] = []
+
+            // iOS 17 Vision : isole les objets de premier plan, puis classe chaque masque.
+            // Cette segmentation est générique, pas une segmentation sémantique d'ingrédients.
+            let instanceRequest = VNGenerateForegroundInstanceMaskRequest()
+            if (try? handler.perform([instanceRequest])) != nil,
+               let observation = instanceRequest.results?.first {
+                for instance in Array(observation.allInstances).prefix(6) {
+                    guard let masked = try? observation.generateMaskedImage(
+                        ofInstances: IndexSet(integer: instance),
+                        from: handler,
+                        croppedToInstancesExtent: true
+                    ) else { continue }
+                    let classifier = VNClassifyImageRequest()
+                    if (try? VNImageRequestHandler(cvPixelBuffer: masked, options: [:]).perform([classifier])) != nil {
+                        predictions.append(contentsOf: (classifier.results ?? []).prefix(5).map {
+                            ($0.identifier, $0.confidence)
+                        })
+                    }
+                }
+            }
+
+            // Classification de l'image entière en complément et en solution de repli.
+            let wholeImage = VNClassifyImageRequest()
+            try handler.perform([wholeImage])
+            predictions.append(contentsOf: (wholeImage.results ?? []).prefix(15).map {
+                ($0.identifier, $0.confidence)
+            })
+            return predictions
         }.value
 
         var seen = Set<String>()
