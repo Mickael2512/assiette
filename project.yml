@@ -15,7 +15,7 @@ targets:
     platform: iOS
     sources:
       - path: .
-        excludes: ["project.yml", "build.yml", "README.md", ".github", "Config"]
+        excludes: ["project.yml", "build.yml", "README.md", ".github", ".git", "docs", "Config"]
     info:
       path: Config/Info.plist
       properties:
