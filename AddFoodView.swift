@@ -71,7 +71,16 @@ struct AddFoodView: View {
                 async let us = (try? await FoodDB.usda(q)) ?? []
                 hits = Ciqual.search(q) + (await off) + (await us); cands = []; picked = nil
                 if hits.isEmpty { err = "Aucun résultat. Les bases USDA sont en anglais." }
-            } else { cands = try await AI.estimate(q, nil); hits = [] }
+            } else {
+                hits = Ciqual.search(q)
+                cands = []
+                picked = nil
+                if hits.isEmpty {
+                    err = Ciqual.rows.isEmpty
+                        ? "La recherche hors ligne nécessite d’importer la base CIQUAL dans Réglages."
+                        : "Aucun aliment correspondant dans CIQUAL. Essayez un nom plus simple."
+                }
+            }
         }
     }
     func analyze(_ img: UIImage) {
@@ -113,8 +122,8 @@ struct AddFoodView: View {
                         Text("Analyse locale, sans compte ni connexion. Cette version utilise encore la classification générique de Vision : elle suggère des aliments probables, mais ne sépare pas les ingrédients d’un plat composé et ne mesure pas les grammes. Vérifiez chaque suggestion et saisissez la quantité avant l’ajout.")
                     }
                 } else {
-                    TextField(mode == 0 ? "Ex. haribo, yaourt grec, banane…" : "Ex. 2 œufs, 1 tranche de pain complet", text: $text).onSubmit(go)
-                    Button(mode == 0 ? "Rechercher" : "Estimer", action: go).disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
+                    TextField(mode == 0 ? "Ex. yaourt grec, banane…" : "Nom exact ou approchant d’un aliment", text: $text).onSubmit(go)
+                    Button(mode == 0 ? "Rechercher dans les bases" : "Rechercher hors ligne", action: go).disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
                     if mode == 0 {
                         Button { scanning = true } label: { Label("Scanner un code-barres", systemImage: "barcode.viewfinder") }
                             .disabled(!DataScannerViewController.isSupported || !DataScannerViewController.isAvailable)
