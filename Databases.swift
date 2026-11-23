@@ -131,42 +131,93 @@ enum Ciqual {
     static let file = URL.documentsDirectory.appending(path: "ciqual.csv")
     static var rows: [OFFResult] = []
 
-    static func split(_ line: String, _ sep: Character) -> [String] {
-        var out: [String] = [], cur = "", q = false
-        for ch in line {
-            if ch == "\"" { q.toggle() } else if ch == sep && !q { out.append(cur); cur = "" } else { cur.append(ch) }
+    /// Parse CSV avec guillemets échappés et champs multilignes.
+    static func parseCSV(_ text: String, separator: Character) -> [[String]] {
+        let chars = Array(text)
+        var rows: [[String]] = [], row: [String] = [], field = ""
+        var quoted = false, i = 0
+        while i < chars.count {
+            let ch = chars[i]
+            if ch == "\"" {
+                if quoted && i + 1 < chars.count && chars[i + 1] == "\"" {
+                    field.append("\""); i += 1
+                } else { quoted.toggle() }
+            } else if ch == separator && !quoted {
+                row.append(field); field = ""
+            } else if (ch == "\n" || ch == "\r") && !quoted {
+                if ch == "\r" && i + 1 < chars.count && chars[i + 1] == "\n" { i += 1 }
+                row.append(field); field = ""
+                if row.contains(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) { rows.append(row) }
+                row = []
+            } else { field.append(ch) }
+            i += 1
         }
-        out.append(cur); return out
+        row.append(field)
+        if row.contains(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) { rows.append(row) }
+        return rows
     }
-    static func num(_ s: String) -> Double {
-        Double(s.replacingOccurrences(of: ",", with: ".").replacingOccurrences(of: "<", with: "").trimmingCharacters(in: .whitespaces)) ?? 0
+
+    /// Les valeurs absentes, "traces", "-" et "<x" restent inconnues, jamais égales à zéro.
+    static func num(_ raw: String) -> Double? {
+        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")
+        guard !value.isEmpty, value != "-", !value.localizedCaseInsensitiveContains("trace"), !value.hasPrefix("<") else { return nil }
+        return Double(value)
     }
+
     static func load() {
         rows = []
-        guard let d = try? Data(contentsOf: file), let t = String(data: d, encoding: .utf8) ?? String(data: d, encoding: .isoLatin1) else { return }
-        let lines = t.split(whereSeparator: \.isNewline).map(String.init)
-        guard let h = lines.first else { return }
-        let sep: Character = h.contains(";") ? ";" : (h.contains("\t") ? "\t" : ",")
-        let cols = split(h, sep).map { $0.lowercased() }
-        func idx(_ f: (String) -> Bool) -> Int? { cols.firstIndex(where: f) }
-        guard let n = idx({ $0.contains("alim_nom_fr") }),
-              let k = idx({ $0.contains("kcal") && $0.contains("1169") }) ?? idx({ $0.contains("kcal") }),
-              let p = idx({ $0.hasPrefix("prot") }), let l = idx({ $0.hasPrefix("lipides") }), let g = idx({ $0.hasPrefix("glucides") }) else { return }
-        rows = lines.dropFirst().compactMap { ln -> OFFResult? in
-            let c = split(ln, sep)
-            guard c.count > max(n, k, p, l, g) else { return nil }
-            return OFFResult(name: c[n], brand: "", per100: Macros(kcal: num(c[k]), p: num(c[p]), l: num(c[l]), g: num(c[g])), source: "CIQUAL")
+        guard let data = try? Data(contentsOf: file),
+              let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else { return }
+        let header = String(text.prefix { $0 != "\n" && $0 != "\r" })
+        let separator: Character = header.contains(";") ? ";" : (header.contains("\t") ? "\t" : ",")
+        let records = parseCSV(text, separator: separator)
+        guard let columns = records.first?.map({ $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }) else { return }
+        func index(_ predicate: (String) -> Bool) -> Int? { columns.firstIndex(where: predicate) }
+        guard let nameIndex = index({ $0.contains("alim_nom_fr") }),
+              let kcalIndex = index({ $0.contains("kcal") && $0.contains("1169") }) ?? index({ $0.contains("kcal") }),
+              let proteinIndex = index({ $0.hasPrefix("prot") }),
+              let fatIndex = index({ $0.hasPrefix("lipides") }),
+              let carbIndex = index({ $0.hasPrefix("glucides") }) else { return }
+        rows = records.dropFirst().compactMap { fields -> OFFResult? in
+            let indices = [nameIndex, kcalIndex, proteinIndex, fatIndex, carbIndex]
+            guard indices.allSatisfy({ fields.indices.contains($0) }),
+                  let kcal = num(fields[kcalIndex]), let protein = num(fields[proteinIndex]),
+                  let fat = num(fields[fatIndex]), let carbs = num(fields[carbIndex]) else { return nil }
+            let name = fields[nameIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return nil }
+            return OFFResult(name: name, brand: "", per100: Macros(kcal: kcal, p: protein, l: fat, g: carbs), source: "CIQUAL")
         }
     }
-    static func search(_ q: String) -> [OFFResult] {
-        Array(rows.filter { $0.name.range(of: q, options: [.caseInsensitive, .diacriticInsensitive]) != nil }.prefix(15))
+
+    static func search(_ query: String) -> [OFFResult] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return [] }
+        return Array(rows.filter { $0.name.range(of: q, options: [.caseInsensitive, .diacriticInsensitive]) != nil }.prefix(30))
     }
+
     static func importFile(_ url: URL) throws {
-        let ok = url.startAccessingSecurityScopedResource()
-        defer { if ok { url.stopAccessingSecurityScopedResource() } }
-        try? FileManager.default.removeItem(at: file)
-        try FileManager.default.copyItem(at: url, to: file)
-        load()
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        let temporary = file.appendingPathExtension("importing")
+        let previous = file.appendingPathExtension("previous")
+        try? FileManager.default.removeItem(at: temporary)
+        try? FileManager.default.removeItem(at: previous)
+        try FileManager.default.copyItem(at: url, to: temporary)
+        if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.moveItem(at: file, to: previous) }
+        do {
+            try FileManager.default.moveItem(at: temporary, to: file)
+            load()
+            guard !rows.isEmpty else {
+                try? FileManager.default.removeItem(at: file)
+                if FileManager.default.fileExists(atPath: previous.path) { try? FileManager.default.moveItem(at: previous, to: file) }
+                load()
+                throw AIError.bad("Le fichier a été copié, mais son format ou ses colonnes ne correspondent pas à la table CIQUAL attendue. Exportez l’onglet « composition nutritionnelle » en CSV UTF-8.")
+            }
+            try? FileManager.default.removeItem(at: previous)
+        } catch {
+            try? FileManager.default.removeItem(at: temporary)
+            throw error
+        }
     }
 }
 
