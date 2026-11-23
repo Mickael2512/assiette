@@ -142,7 +142,7 @@ struct Cand: Identifiable {
 }
 
 @Observable final class Store {
-    static let currentSchemaVersion = 2
+    static let currentSchemaVersion = 3
 
     var entries: [Entry] = []
     var recipes: [Recipe] = []
