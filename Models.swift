@@ -34,20 +34,21 @@ struct Macros: Codable, Hashable {
     var p: Double
     var l: Double
     var g: Double
-    var fiber: Double
-    var sugars: Double
-    var saturatedFat: Double
-    var sodium: Double
+    /// Nutriments facultatifs : nil signifie « donnée inconnue », jamais zéro.
+    var fiber: Double?
+    var sugars: Double?
+    var saturatedFat: Double?
+    var sodium: Double?
 
     init(
         kcal: Double = 0,
         p: Double = 0,
         l: Double = 0,
         g: Double = 0,
-        fiber: Double = 0,
-        sugars: Double = 0,
-        saturatedFat: Double = 0,
-        sodium: Double = 0
+        fiber: Double? = nil,
+        sugars: Double? = nil,
+        saturatedFat: Double? = nil,
+        sodium: Double? = nil
     ) {
         self.kcal = kcal
         self.p = p
@@ -63,18 +64,18 @@ struct Macros: Codable, Hashable {
         case kcal, p, l, g, fiber, sugars, saturatedFat, sodium
     }
 
-    /// Les anciennes sauvegardes ne contiennent que les quatre macros historiques.
-    /// Les nouveaux nutriments démarrent donc à zéro lors de leur migration.
+    /// Les anciennes sauvegardes conservent leurs quatre macros historiques.
+    /// Les nutriments secondaires absents restent inconnus (nil), pas zéro.
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         kcal = try values.decodeIfPresent(Double.self, forKey: .kcal) ?? 0
         p = try values.decodeIfPresent(Double.self, forKey: .p) ?? 0
         l = try values.decodeIfPresent(Double.self, forKey: .l) ?? 0
         g = try values.decodeIfPresent(Double.self, forKey: .g) ?? 0
-        fiber = try values.decodeIfPresent(Double.self, forKey: .fiber) ?? 0
-        sugars = try values.decodeIfPresent(Double.self, forKey: .sugars) ?? 0
-        saturatedFat = try values.decodeIfPresent(Double.self, forKey: .saturatedFat) ?? 0
-        sodium = try values.decodeIfPresent(Double.self, forKey: .sodium) ?? 0
+        fiber = try values.decodeIfPresent(Double.self, forKey: .fiber)
+        sugars = try values.decodeIfPresent(Double.self, forKey: .sugars)
+        saturatedFat = try values.decodeIfPresent(Double.self, forKey: .saturatedFat)
+        sodium = try values.decodeIfPresent(Double.self, forKey: .sodium)
     }
 
     static func + (a: Macros, b: Macros) -> Macros {
@@ -83,10 +84,10 @@ struct Macros: Codable, Hashable {
             p: a.p + b.p,
             l: a.l + b.l,
             g: a.g + b.g,
-            fiber: a.fiber + b.fiber,
-            sugars: a.sugars + b.sugars,
-            saturatedFat: a.saturatedFat + b.saturatedFat,
-            sodium: a.sodium + b.sodium
+            fiber: (a.fiber != nil && b.fiber != nil) ? a.fiber! + b.fiber! : nil,
+            sugars: (a.sugars != nil && b.sugars != nil) ? a.sugars! + b.sugars! : nil,
+            saturatedFat: (a.saturatedFat != nil && b.saturatedFat != nil) ? a.saturatedFat! + b.saturatedFat! : nil,
+            sodium: (a.sodium != nil && b.sodium != nil) ? a.sodium! + b.sodium! : nil
         )
     }
 
@@ -96,10 +97,10 @@ struct Macros: Codable, Hashable {
             p: p * factor,
             l: l * factor,
             g: g * factor,
-            fiber: fiber * factor,
-            sugars: sugars * factor,
-            saturatedFat: saturatedFat * factor,
-            sodium: sodium * factor
+            fiber: fiber.map { $0 * factor },
+            sugars: sugars.map { $0 * factor },
+            saturatedFat: saturatedFat.map { $0 * factor },
+            sodium: sodium.map { $0 * factor }
         )
     }
 
@@ -232,8 +233,9 @@ struct Cand: Identifiable {
     }
 
     func total(_ day: Date, _ meal: Meal? = nil) -> Macros {
-        entries.filter { Calendar.current.isDate($0.date, inSameDayAs: day) && (meal == nil || $0.meal == meal) }
-            .reduce(Macros()) { $0 + $1.m }
+        let matching = entries.filter { Calendar.current.isDate($0.date, inSameDayAs: day) && (meal == nil || $0.meal == meal) }
+        guard let first = matching.first else { return Macros() }
+        return matching.dropFirst().reduce(first.m) { $0 + $1.m }
     }
 
     func add(_ entry: Entry) {
