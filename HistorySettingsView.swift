@@ -90,7 +90,7 @@ struct SettingsView: View {
                     SecureField("Clé API Gemini (gratuite)", text: $gem).textInputAutocapitalization(.never).autocorrectionDisabled()
                     TextField("Modèle", text: $model).textInputAutocapitalization(.never).autocorrectionDisabled()
                 } header: { Text("Intelligence artificielle") } footer: {
-                    Text("Gratuit : créez une clé sur aistudio.google.com avec un compte Google. Le palier gratuit est limité en débit et Google peut utiliser les textes et photos envoyés.")
+                    Text("Les photos sont reconnues gratuitement sur l’iPhone, sans compte ni connexion. Gemini reste facultatif pour les estimations à partir du texte et l’import de recettes : il nécessite une clé Google, Internet et un compte Google. Les contenus envoyés à Gemini quittent l’appareil.")
                 }
                 Section {
                     SecureField("Clé USDA (optionnelle)", text: $usda).textInputAutocapitalization(.never).autocorrectionDisabled()
