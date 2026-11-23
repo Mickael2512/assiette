@@ -67,7 +67,7 @@ enum Importer {
         let b = rx(#"<meta[^>]+content="([^"]*)"[^>]*(?:property|name)="\#(key)""#, html)
         return (a.first ?? b.first ?? "")
             .replacingOccurrences(of: "&amp;", with: "&")
-            .replacingOccurrences(of: "&quot;", with: "\\"")
+            .replacingOccurrences(of: "&quot;", with: "\"")
             .replacingOccurrences(of: "&#39;", with: "'")
             .replacingOccurrences(of: "&lt;", with: "<")
             .replacingOccurrences(of: "&gt;", with: ">")
