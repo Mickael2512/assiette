@@ -115,3 +115,33 @@ Aucune équivalence avec Yazio ne doit être revendiquée avant comparaison repr
 - Les valeurs nutritionnelles inconnues restent inconnues.
 - L'utilisateur valide le résultat avant son ajout au journal.
 - Les performances et erreurs sont mesurées sur des repas pesés ; aucune précision non démontrée n'est affichée.
+
+
+## Évaluation de modèles — état du 23 novembre 2026
+
+### Candidat étudié : FoodSAM
+
+FoodSAM est le candidat de recherche le plus proche du besoin fonctionnel : son approche combine un segmenter sémantique spécialisé, SAM pour produire des masques d'instances et un détecteur d'objets. Le dépôt annonce des résultats sur FoodSeg103 et UECFoodPixComplete et indique une licence Apache 2.0 pour le modèle. Le dépôt officiel reste toutefois une implémentation PyTorch orientée recherche, avec plusieurs checkpoints séparés, PyTorch 1.8.1, CUDA 11.1, MMCV et Segment Anything. Il ne fournit pas un paquet Core ML iOS prêt à intégrer. Une conversion directe sans mesure de qualité, sans vérification de chaque poids et sans test de mémoire/latence iPhone serait prématurée.
+
+Sources consultées :
+- FoodSAM, dépôt officiel et licence du modèle : https://github.com/jamesjg/FoodSAM
+- Installation et dépendances/checkpoints : https://github.com/jamesjg/FoodSAM/blob/main/installation.md
+- FoodSeg103 : https://github.com/ada-yl325/FoodSeg103
+
+### Données d'entraînement
+
+FoodSeg103 contient 7 118 images annotées au niveau pixel pour 103 catégories d'ingrédients. Le dépôt de référence indique Apache 2.0. C'est un point de départ pertinent pour évaluer la segmentation, mais il ne garantit ni la couverture des plats français, ni l'estimation de masse, ni la qualité sur les photos d'iPhone. La licence des données et celle des poids du modèle doivent rester auditées séparément.
+
+### Décision d'intégration
+
+FoodSAM est retenu comme candidat de prototypage et de conversion, pas comme dépendance embarquée validée. Aucun poids n'est ajouté à l'application à ce stade : nous n'avons pas encore de binaire Core ML reproductible, de mesures sur appareil ni de benchmark de masse. Le classifieur Vision actuel reste explicitement un prototype de suggestions. Il ne doit pas être présenté comme une décomposition automatique de plat.
+
+### Étapes techniques avant activation
+
+1. Récupérer les checkpoints depuis les sources officielles et archiver leurs empreintes SHA-256 et licences.
+2. Vérifier la compatibilité des dépendances et la provenance de chaque composant tiers (notamment SAM, MMCV et le détecteur).
+3. Exporter d'abord le segmenter sémantique seul vers Core ML, puis mesurer taille, précision, mémoire et latence sur plusieurs iPhone.
+4. Comparer les masques au jeu de validation FoodSeg103 et à un jeu complémentaire de repas français pesés.
+5. Ajouter la détection d'instances seulement si elle améliore réellement la séparation des aliments composés.
+6. Développer séparément l'estimation de masse : la segmentation 2D seule ne fournit pas un poids en grammes.
+7. N'activer l'expérience utilisateur qu'après validation des résultats, de la licence et du parcours de correction.
