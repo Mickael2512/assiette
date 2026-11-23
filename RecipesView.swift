@@ -210,7 +210,7 @@ struct ImportView: View {
                 .pickerStyle(.segmented)
                 .listRowBackground(Color.clear)
 
-                Section(mode == 0 ? "Lien de la recette" : "Texte de la recette") {
+                Section {
                     TextField(mode == 0 ? "https://…" : "Nom, ingrédients et préparation…", text: $text, axis: .vertical)
                         .lineLimit(4...10)
                     if mode == 0 {
