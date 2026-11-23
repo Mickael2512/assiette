@@ -110,7 +110,8 @@ extension FoodDB {
             guard let n = f["description"] as? String, let ns = f["foodNutrients"] as? [[String: Any]] else { return nil }
             func v(_ num: String) -> Double? { ns.first { ($0["nutrientNumber"] as? String) == num }.flatMap { ($0["value"] as? NSNumber)?.doubleValue } }
             guard let kcal = v("208") else { return nil }
-            return OFFResult(name: n, brand: "", per100: Macros(kcal: kcal, p: v("203") ?? 0, l: v("204") ?? 0, g: v("205") ?? 0), source: "USDA")
+            guard let protein = v("203"), let fat = v("204"), let carbs = v("205") else { return nil }
+            return OFFResult(name: n, brand: "", per100: Macros(kcal: kcal, p: protein, l: fat, g: carbs), source: "USDA")
         }
     }
 
@@ -122,8 +123,9 @@ extension FoodDB {
               let nu = p["nutriments"] as? [String: Any] else { return nil }
         func v(_ k: String) -> Double? { (nu[k] as? NSNumber)?.doubleValue ?? Double(nu[k] as? String ?? "") }
         guard let kcal = v("energy-kcal_100g") else { return nil }
+        guard let protein = v("proteins_100g"), let fat = v("fat_100g"), let carbs = v("carbohydrates_100g") else { return nil }
         return OFFResult(name: p["product_name"] as? String ?? "Produit", brand: p["brands"] as? String ?? "",
-                         per100: Macros(kcal: kcal, p: v("proteins_100g") ?? 0, l: v("fat_100g") ?? 0, g: v("carbohydrates_100g") ?? 0))
+                         per100: Macros(kcal: kcal, p: protein, l: fat, g: carbs))
     }
 }
 
