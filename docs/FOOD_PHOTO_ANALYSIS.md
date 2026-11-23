@@ -130,7 +130,7 @@ Sources consultées :
 
 ### Données d'entraînement
 
-FoodSeg103 contient 7 118 images annotées au niveau pixel pour 103 catégories d'ingrédients. Le dépôt de référence indique Apache 2.0. C'est un point de départ pertinent pour évaluer la segmentation, mais il ne garantit ni la couverture des plats français, ni l'estimation de masse, ni la qualité sur les photos d'iPhone. La licence des données et celle des poids du modèle doivent rester auditées séparément.
+FoodSeg103 contient 7 118 images annotées au niveau pixel pour 103 catégories d'ingrédients. Attention : la licence Apache 2.0 du dépôt logiciel/benchmark ne doit pas être confondue avec les droits sur les images. Les fiches de distribution indiquent que les images proviennent de Recipe1M, dont les conditions sont réservées à la recherche/éducation non commerciale, avec accès soumis à inscription et sans redistribution générale. Ce jeu ne peut donc pas être supposé utilisable pour entraîner un modèle destiné à une application commerciale distribuée. Il peut servir de benchmark de recherche sous réserve de ses conditions d'accès, mais Assiette doit utiliser des données dont les droits autorisent explicitement l'entraînement et la redistribution commerciale.
 
 ### Décision d'intégration
 
@@ -145,3 +145,13 @@ FoodSAM est retenu comme candidat de prototypage et de conversion, pas comme dé
 5. Ajouter la détection d'instances seulement si elle améliore réellement la séparation des aliments composés.
 6. Développer séparément l'estimation de masse : la segmentation 2D seule ne fournit pas un poids en grammes.
 7. N'activer l'expérience utilisateur qu'après validation des résultats, de la licence et du parcours de correction.
+
+
+## Correction de l'audit de licence
+
+La licence Apache 2.0 du code/benchmark FoodSeg103 ne concède pas automatiquement les droits sur les images Recipe1M. Les conditions de Recipe1M mentionnées dans les fiches du jeu imposent des limites non commerciales et d'accès/redistribution. FoodSeg103 ne doit donc pas être considéré comme une source d'entraînement librement réutilisable pour fabriquer les poids commerciaux d'Assiette. FoodSAM reste un candidat d'architecture et son dépôt annonce Apache 2.0 pour le modèle, mais chaque checkpoint et dépendance doit être contrôlé séparément. La voie la plus sûre est de constituer/obtenir un dataset dont les licences des images, annotations et modèles autorisent explicitement l'entraînement et la redistribution commerciale.
+
+Sources :
+- Dépôt officiel FoodSeg103 et licence du code : https://github.com/LARC-CMU-SMU/FoodSeg103-Benchmark-v1
+- Distinction de licence entre annotations et images Recipe1M : https://huggingface.co/datasets/pictograph/foodseg103
+- FoodSAM et licence annoncée pour le modèle : https://github.com/jamesjg/FoodSAM
