@@ -2,7 +2,7 @@
 
 ## Objectif produit
 
-Permettre à Assiette de transformer une ou plusieurs photos d'un repas composé en une proposition structurée et modifiable : aliments/ingrédients visibles, quantité estimée en grammes, nutriments calculés à partir d'une base de référence locale, et niveau d'incertitude. Le flux essentiel doit fonctionner sans compte tiers, sans clé API et sans envoyer de photo hors de l'iPhone.
+Permettre à Assiette de transformer une ou plusieurs photos d'un repas composé en une proposition structurée et modifiable : aliments/ingrédients visibles, quantité estimée en grammes, nutriments calculés à partir d'une base de référence locale, et niveau d'incertitude. Le flux ne demande aucun compte ni aucune clé API à l'utilisateur. La photo est envoyée via HTTPS à notre backend, qui appelle le modèle multimodal ; la clé fournisseur reste côté serveur.
 
 L'analyse photo est une aide à la saisie, jamais une mesure exacte. Une photo 2D ne révèle pas systématiquement la profondeur, les ingrédients cachés, l'huile absorbée, les sauces ou le poids réel. L'interface ne doit donc jamais présenter une estimation comme une valeur pesée.
 
@@ -35,7 +35,7 @@ Le moteur cible doit combiner :
 - reconnaissance spécialisée des aliments et des préparations ;
 - fusion des résultats de plusieurs vues.
 
-Les modèles doivent être exécutables localement via Core ML / Vision, quantifiés si la qualité reste acceptable, et évalués sur des repas réellement photographiés avec une cuisine française/européenne représentative. Aucun modèle ne sera embarqué avant audit de licence, provenance des poids et droits sur les données d'entraînement.
+Le moteur principal est une IA multimodale hébergée dans le cloud. Le backend protège la clé du fournisseur, valide les entrées et renvoie un JSON strict. Le fournisseur et le modèle doivent rester interchangeables. Aucun modèle ne sera embarqué avant audit de licence, provenance des poids et droits sur les données d'entraînement.
 
 ### C. Estimation des portions
 
@@ -109,7 +109,7 @@ Aucune équivalence avec Yazio ne doit être revendiquée avant comparaison repr
 ## Critères d'acceptation
 
 - Une analyse photo ne nécessite aucun compte, aucune clé API et aucune connexion.
-- Les photos ne quittent jamais l'appareil dans le parcours standard.
+- Les photos sont transmises au backend uniquement pour l'analyse, via HTTPS ; leur conservation côté Assiette est désactivée.
 - Un plat composé peut produire plusieurs ingrédients indépendants, chacun corrigeable.
 - Les grammes sont explicitement marqués comme estimés tant qu'ils ne sont pas pesés/saisis.
 - Les valeurs nutritionnelles inconnues restent inconnues.
@@ -164,3 +164,19 @@ Le pipeline iOS tente maintenant une segmentation générique des objets de prem
 Documentation Apple :
 - https://developer.apple.com/documentation/vision/generateforegroundinstancemaskrequest
 - https://developer.apple.com/documentation/vision/vninstancemaskobservation/generatemaskedimage(ofinstances:from:croppedtoinstancesextent:)
+
+
+## Architecture cloud — décision produit du 23 novembre 2026
+
+La reconnaissance photo utilise une IA multimodale distante. Le premier adaptateur est Gemini via un Cloudflare Worker, avec une clé API stockée comme secret serveur. L'application ne contient aucune clé Google et n'exige aucun compte de l'utilisateur.
+
+Le Worker est dans `backend/food-analysis`. Il reçoit une image JPEG/PNG/WebP, demande au modèle une décomposition structurée du plat et renvoie les ingrédients, les grammes estimés, la confiance et les incertitudes. Les calories et macros ne sont jamais demandées au modèle : l'app les calcule à partir des entrées CIQUAL correspondantes.
+
+Configuration restante avant un test réel :
+1. Déployer le Worker Cloudflare.
+2. Créer une clé Gemini et la stocker avec `wrangler secret put GEMINI_API_KEY`.
+3. Activer un rate limit/WAF et les alertes de quota/coût avant d'exposer le endpoint.
+4. Renseigner `ASSIETTE_FOOD_AI_URL` dans `project.yml` avec l'URL HTTPS du Worker, puis régénérer et compiler l'IPA.
+5. Tester sur des photos de lasagnes, pad thaï, plats simples et plats ambigus ; vérifier ingrédients, quantités et correspondances CIQUAL.
+
+Le quota gratuit Gemini n'est pas illimité ni garanti. Une utilisation publique sans limite peut entraîner des coûts et de l'abus ; le backend doit appliquer des limites avant toute ouverture au public.
