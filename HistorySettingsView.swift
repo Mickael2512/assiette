@@ -70,8 +70,6 @@ struct HistoryView: View {
 
 struct SettingsView: View {
     @Environment(Store.self) var store
-    @AppStorage("geminiKey") private var gem = ""
-    @AppStorage("geminiModel") private var model = "gemini-2.5-flash"
     @AppStorage("usdaKey") private var usda = ""
     @State private var wipe = false
     @State private var importing = false
@@ -188,11 +186,9 @@ struct SettingsView: View {
                     Stepper("Lipides : \(Int(s.goal.l)) g", value: $s.goal.l, in: 20...300, step: 5)
                     Stepper("Glucides : \(Int(s.goal.g)) g", value: $s.goal.g, in: 20...600, step: 5)
                 }
-                Section {
-                    SecureField("Clé API Gemini (gratuite)", text: $gem).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    TextField("Modèle", text: $model).textInputAutocapitalization(.never).autocorrectionDisabled()
-                } header: { Text("Intelligence artificielle") } footer: {
-                    Text("Les photos sont reconnues gratuitement sur l’iPhone, sans compte ni connexion. Gemini reste facultatif pour les estimations à partir du texte et l’import de recettes : il nécessite une clé Google, Internet et un compte Google. Les contenus envoyés à Gemini quittent l’appareil.")
+                Section("Reconnaissance") {
+                    Text("La reconnaissance photo actuelle fonctionne localement avec Apple Vision. Elle propose des aliments probables, mais ne segmente pas encore les ingrédients d’un plat composé et ne mesure pas les portions.")
+                        .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section {
                     SecureField("Clé USDA (optionnelle)", text: $usda).textInputAutocapitalization(.never).autocorrectionDisabled()
