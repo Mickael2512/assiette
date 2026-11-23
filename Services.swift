@@ -74,8 +74,12 @@ enum Importer {
     }
 
     private static func typeIsRecipe(_ value: Any?) -> Bool {
-        if let type = value as? String { return type.caseInsensitiveCompare("Recipe") == .orderedSame }
-        if let types = value as? [String] { return types.contains { $0.caseInsensitiveCompare("Recipe") == .orderedSame } }
+        func matches(_ type: String) -> Bool {
+            let normalized = type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return normalized == "recipe" || normalized.hasSuffix("/recipe") || normalized.hasSuffix("#recipe")
+        }
+        if let type = value as? String { return matches(type) }
+        if let types = value as? [String] { return types.contains(where: matches) }
         return false
     }
 
@@ -162,8 +166,7 @@ enum Importer {
             throw AIError.bad("Aucune recette structurée détectée sur cette page. Collez le texte de la recette avec les sections Ingrédients et Préparation.")
         }
         let nutrition = recipe["nutrition"] as? [String: Any] ?? [:]
-        let yieldText = strings(recipe["recipeYield"]).first ?? "1"
-        let servings = amount(yieldText).map { max(1, Int($0)) } ?? 1
+        let servings = amount(recipe["recipeYield"]).map { max(1, Int($0)) } ?? 1
         let instructions = strings(recipe["recipeInstructions"])
         let ingredients = strings(recipe["recipeIngredient"])
         guard !ingredients.isEmpty else { throw AIError.bad("La page contient une recette mais aucune liste d’ingrédients exploitable.") }
