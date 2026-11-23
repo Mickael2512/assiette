@@ -1,11 +1,10 @@
 import SwiftUI
 
 enum AIError: LocalizedError {
-    case noKey, bad(String)
+    case bad(String)
     var errorDescription: String? {
         switch self {
-        case .noKey: return "Ajoutez votre clé Gemini gratuite dans Réglages."
-        case .bad(let s): return s
+        case .bad(let message): return message
         }
     }
 }
