@@ -1,0 +1,7 @@
+name = "assiette-food-analysis"
+main = "src/index.ts"
+compatibility_date = "2026-11-23"
+
+[vars]
+GEMINI_MODEL = "gemini-2.5-flash"
+# Set ALLOWED_ORIGINS to the production app origin if a web client is added.
