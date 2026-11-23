@@ -218,6 +218,8 @@ struct ImportView: View {
                     }
                     Button(mode == 0 ? "Importer la recette" : "Enregistrer la recette", action: importContent)
                         .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || busy)
+                } header: {
+                    Text(mode == 0 ? "Lien de la recette" : "Texte de la recette")
                 } footer: {
                     if mode == 0 {
                         Text("Assiette lit les données structurées Recipe (JSON-LD) publiées par le site. Aucun compte ni service d’IA n’est nécessaire. Certains sites bloquent l’accès ou ne publient pas ces données.")
