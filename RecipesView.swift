@@ -45,7 +45,7 @@ struct RecipesView: View {
                 Picker("", selection: $filter) { Text("Toutes").tag(0); Text("Déjà cuisinées").tag(1) }
                     .pickerStyle(.segmented).padding(.horizontal)
                 if shown.isEmpty {
-                    ContentUnavailableView("Aucune recette", systemImage: "book.closed", description: Text("Importez un lien, une photo de livre ou demandez une idée avec votre frigo."))
+                    ContentUnavailableView("Aucune recette", systemImage: "book.closed", description: Text("Importez un lien contenant des données structurées ou collez le texte d’une recette."))
                         .padding(.top, 60)
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 14)], spacing: 14) {
