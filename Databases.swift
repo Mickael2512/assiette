@@ -180,6 +180,10 @@ enum Ciqual {
               let proteinIndex = index({ $0.hasPrefix("prot") }),
               let fatIndex = index({ $0.hasPrefix("lipides") }),
               let carbIndex = index({ $0.hasPrefix("glucides") }) else { return }
+        let fiberIndex = index({ $0.contains("fibres alimentaires") || $0.contains("dietary fibre") })
+        let sugarIndex = index({ $0.contains("sucres") && !$0.contains("saccharose") }) ?? index({ $0 == "sugars (g/100 g)" })
+        let saturatedFatIndex = index({ $0.contains("acides gras saturés") || $0.contains("saturated fatty acids") })
+        let sodiumIndex = index({ $0.contains("sodium") && $0.contains("mg") })
         rows = records.dropFirst().compactMap { fields -> OFFResult? in
             let indices = [nameIndex, kcalIndex, proteinIndex, fatIndex, carbIndex]
             guard indices.allSatisfy({ fields.indices.contains($0) }),
@@ -187,7 +191,22 @@ enum Ciqual {
                   let fat = num(fields[fatIndex]), let carbs = num(fields[carbIndex]) else { return nil }
             let name = fields[nameIndex].trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { return nil }
-            return OFFResult(name: name, brand: "", per100: Macros(kcal: kcal, p: protein, l: fat, g: carbs), source: "CIQUAL")
+            func optionalValue(_ column: Int?) -> Double? {
+                guard let column, fields.indices.contains(column) else { return nil }
+                return num(fields[column])
+            }
+            return OFFResult(
+                name: name,
+                brand: "",
+                per100: Macros(
+                    kcal: kcal, p: protein, l: fat, g: carbs,
+                    fiber: optionalValue(fiberIndex),
+                    sugars: optionalValue(sugarIndex),
+                    saturatedFat: optionalValue(saturatedFatIndex),
+                    sodium: optionalValue(sodiumIndex)
+                ),
+                source: "CIQUAL"
+            )
         }
     }
 
