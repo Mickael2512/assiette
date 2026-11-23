@@ -227,7 +227,7 @@ struct SettingsView: View {
             .navigationTitle("Réglages")
             .onAppear(perform: loadProfileFields)
             .onChange(of: s.goal) { _, _ in store.save() }
-            .fileImporter(isPresented: $importing, allowedContentTypes: [.commaSeparatedText, .plainText, .data]) { r in
+            .fileImporter(isPresented: $importing, allowedContentTypes: [.commaSeparatedText, .plainText]) { r in
                 switch r {
                 case .success(let url):
                     do { try Ciqual.importFile(url); nCiqual = Ciqual.rows.count; ciqualError = "" }
