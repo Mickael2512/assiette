@@ -22,7 +22,7 @@ targets:
         CFBundleDisplayName: Assiette
         UILaunchScreen: {}
         NSCameraUsageDescription: Pour photographier vos plats, recettes et codes-barres.
-        ASSIETTE_FOOD_AI_URL: ""
+        ASSIETTE_FOOD_AI_URL: "https://assiette-food-analysis.mickael-civet440.workers.dev"
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
     settings:
       base:
