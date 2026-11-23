@@ -70,7 +70,6 @@ struct HistoryView: View {
 
 struct SettingsView: View {
     @Environment(Store.self) var store
-    @AppStorage("usdaKey") private var usda = ""
     @State private var wipe = false
     @State private var importing = false
     @State private var nCiqual = Ciqual.rows.count
@@ -191,7 +190,6 @@ struct SettingsView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section {
-                    SecureField("Clé USDA (optionnelle)", text: $usda).textInputAutocapitalization(.never).autocorrectionDisabled()
                     Button("Importer le fichier CIQUAL (.csv)") { importing = true }
                     Text(nCiqual > 0 ? "CIQUAL chargé : \(nCiqual) aliments" : "CIQUAL non chargé").font(.footnote).foregroundStyle(.secondary)
                     if !ciqualError.isEmpty { Text(ciqualError).font(.footnote).foregroundStyle(.red) }
