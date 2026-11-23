@@ -118,7 +118,7 @@ struct AddFoodView: View {
                     } header: {
                         Text("Reconnaissance sur l’iPhone")
                     } footer: {
-                        Text("Analyse locale, sans compte ni connexion. Cette version utilise encore la classification générique de Vision : elle suggère des aliments probables, mais ne sépare pas les ingrédients d’un plat composé et ne mesure pas les grammes. Vérifiez chaque suggestion et saisissez la quantité avant l’ajout.")
+                        Text("Analyse locale, sans compte ni connexion. Vision tente d’isoler plusieurs objets de premier plan puis classe chaque zone et l’image entière. Cette segmentation reste générique : elle ne sépare pas les ingrédients fondus dans un plat composé et ne mesure pas les grammes. Vérifiez chaque suggestion et saisissez la quantité avant l’ajout.")
                     }
                 } else {
                     TextField(mode == 0 ? "Ex. yaourt grec, banane…" : "Nom exact ou approchant d’un aliment", text: $text).onSubmit(go)
