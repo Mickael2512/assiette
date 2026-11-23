@@ -134,8 +134,12 @@ struct AddFoodView: View {
                     Section("Quantité") {
                         TextField("Grammes", text: $grams).keyboardType(.decimalPad)
                         Button("Ajouter \(p.name)") {
-                            let q = Double(grams.replacingOccurrences(of: ",", with: ".")) ?? 100
-                            add(Cand(name: p.name, detail: "\(Int(q)) g", m: p.per100.scaled(q / 100), source: p.source))
+                            guard let quantity = Double(grams.replacingOccurrences(of: ",", with: ".")),
+                                  quantity > 0, quantity <= 5000 else {
+                                err = "Saisissez une quantité comprise entre 1 et 5 000 g."
+                                return
+                            }
+                            add(Cand(name: p.name, detail: "\(Int(quantity.rounded())) g", m: p.per100.scaled(quantity / 100), source: p.source))
                         }
                     }
                 }
