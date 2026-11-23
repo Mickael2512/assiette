@@ -76,6 +76,7 @@ struct SettingsView: View {
     @State private var wipe = false
     @State private var importing = false
     @State private var nCiqual = Ciqual.rows.count
+    @State private var ciqualError = ""
     var body: some View {
         @Bindable var s = store
         NavigationStack {
@@ -96,6 +97,7 @@ struct SettingsView: View {
                     SecureField("Clé USDA (optionnelle)", text: $usda).textInputAutocapitalization(.never).autocorrectionDisabled()
                     Button("Importer le fichier CIQUAL (.csv)") { importing = true }
                     Text(nCiqual > 0 ? "CIQUAL chargé : \(nCiqual) aliments" : "CIQUAL non chargé").font(.footnote).foregroundStyle(.secondary)
+                    if !ciqualError.isEmpty { Text(ciqualError).font(.footnote).foregroundStyle(.red) }
                 } header: { Text("Bases alimentaires") } footer: {
                     Text("Open Food Facts et USDA sont interrogées en ligne. Pour CIQUAL, téléchargez la table sur ciqual.anses.fr et enregistrez-la en CSV.")
                 }
@@ -104,7 +106,12 @@ struct SettingsView: View {
             .navigationTitle("Réglages")
             .onChange(of: s.goal) { _, _ in store.save() }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.commaSeparatedText, .plainText, .data]) { r in
-                if case .success(let u) = r { try? Ciqual.importFile(u); nCiqual = Ciqual.rows.count }
+                switch r {
+                case .success(let url):
+                    do { try Ciqual.importFile(url); nCiqual = Ciqual.rows.count; ciqualError = "" }
+                    catch { nCiqual = Ciqual.rows.count; ciqualError = error.localizedDescription }
+                case .failure(let error): ciqualError = error.localizedDescription
+                }
             }
             .confirmationDialog("Effacer tout le journal ?", isPresented: $wipe, titleVisibility: .visible) {
                 Button("Effacer", role: .destructive) { store.entries = []; store.save() }
