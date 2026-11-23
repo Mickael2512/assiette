@@ -68,9 +68,8 @@ struct AddFoodView: View {
         run {
             if mode == 0 {
                 async let off = (try? await FoodDB.search(q)) ?? []
-                async let us = (try? await FoodDB.usda(q)) ?? []
-                hits = Ciqual.search(q) + (await off) + (await us); cands = []; picked = nil
-                if hits.isEmpty { err = "Aucun résultat. Les bases USDA sont en anglais." }
+                hits = Ciqual.search(q) + (await off); cands = []; picked = nil
+                if hits.isEmpty { err = "Aucun résultat dans CIQUAL et Open Food Facts." }
             } else {
                 hits = Ciqual.search(q)
                 cands = []
