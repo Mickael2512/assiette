@@ -110,7 +110,7 @@ struct AddFoodView: View {
                     } header: {
                         Text("Reconnaissance sur l’iPhone")
                     } footer: {
-                        Text("L’analyse de la photo fonctionne sans Internet et sans compte. Elle identifie des aliments probables ; les quantités et calories doivent être vérifiées.")
+                        Text("Analyse locale, sans compte ni connexion. Cette version utilise encore la classification générique de Vision : elle suggère des aliments probables, mais ne sépare pas les ingrédients d’un plat composé et ne mesure pas les grammes. Vérifiez chaque suggestion et saisissez la quantité avant l’ajout.")
                     }
                 } else {
                     TextField(mode == 0 ? "Ex. haribo, yaourt grec, banane…" : "Ex. 2 œufs, 1 tranche de pain complet", text: $text).onSubmit(go)
