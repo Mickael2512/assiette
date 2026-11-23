@@ -211,7 +211,7 @@ struct SettingsView: View {
                     Stepper("Glucides : \(Int(s.goal.g)) g", value: $s.goal.g, in: 20...600, step: 5)
                 }
                 Section("Reconnaissance") {
-                    Text("La reconnaissance photo actuelle fonctionne localement avec Apple Vision. Elle propose des aliments probables, mais ne segmente pas encore les ingrédients d’un plat composé et ne mesure pas les portions.")
+                    Text("La reconnaissance photo fonctionne localement avec Apple Vision : segmentation générique de quelques objets de premier plan, puis classification de chaque zone. Elle ne reconnaît pas encore les ingrédients internes d’un plat composé et n’estime pas les portions.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section {
