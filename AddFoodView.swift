@@ -10,6 +10,7 @@ struct AddFoodView: View {
     @State private var text = ""
     @State private var busy = false
     @State private var err = ""
+    @State private var photoStatus = ""
     @State private var cands: [Cand] = []
     @State private var hits: [OFFResult] = []
     @State private var picked: OFFResult?
@@ -26,6 +27,41 @@ struct AddFoodView: View {
         busy = true; err = ""
         Task { do { try await job() } catch { err = error.localizedDescription }; busy = false }
     }
+    func searchLocalFood() {
+        let q = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return }
+        hits = Ciqual.search(q)
+        picked = nil
+        if hits.isEmpty {
+            photoStatus = Ciqual.rows.isEmpty
+                ? "Reconnaissance effectuée sur l’iPhone. Pour retrouver les valeurs nutritionnelles hors ligne, importez d’abord la base CIQUAL dans Réglages."
+                : "Aliment reconnu, mais aucune correspondance exacte dans CIQUAL. Essayez un nom plus simple."
+        } else {
+            photoStatus = "Suggestions nutritionnelles issues de CIQUAL, stocké sur l’iPhone."
+        }
+    }
+    func recognizePhoto(_ image: UIImage) async throws {
+        let predictions = try await OnDeviceFoodRecognition.recognize(image)
+        cands = []
+        hits = []
+        picked = nil
+        guard let first = predictions.first else {
+            photoStatus = "Je n’ai pas identifié clairement d’aliment. Essayez une photo plus rapprochée, avec le plat bien visible."
+            return
+        }
+        text = first.name
+        var local: [OFFResult] = []
+        for prediction in predictions.prefix(4) {
+            local.append(contentsOf: Ciqual.search(prediction.searchTerm))
+        }
+        var seen = Set<String>()
+        hits = local.filter { seen.insert($0.name).inserted }
+        if hits.isEmpty {
+            photoStatus = "L’iPhone reconnaît probablement : " + predictions.prefix(3).map(\.name).joined(separator: ", ") + ". Les calories ne sont pas déduites de l’image : importez CIQUAL pour obtenir des valeurs nutritionnelles hors ligne."
+        } else {
+            photoStatus = "Suggestions reconnues sur l’iPhone. Vérifiez l’aliment et choisissez la bonne entrée CIQUAL."
+        }
+    }
     func go() {
         let q = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
@@ -39,13 +75,13 @@ struct AddFoodView: View {
         }
     }
     func analyze(_ img: UIImage) {
-        run { cands = try await AI.estimate(text, img); hits = [] }
+        run { try await recognizePhoto(img) }
     }
     func analyzeItem(_ item: PhotosPickerItem?) {
         guard let item else { return }
         run {
             guard let d = try await item.loadTransferable(type: Data.self), let img = UIImage(data: d) else { throw AIError.bad("Photo illisible.") }
-            cands = try await AI.estimate(text, img); hits = []
+            try await recognizePhoto(img)
         }
     }
     func lookup(_ code: String) {
@@ -61,8 +97,21 @@ struct AddFoodView: View {
                 Picker("", selection: $mode) { Text("Recherche").tag(0); Text("Photo").tag(1); Text("Texte").tag(2) }
                     .pickerStyle(.segmented).listRowBackground(Color.clear)
                 if mode == 1 {
-                    Button { cam = true } label: { Label("Prendre une photo du plat", systemImage: "camera.fill") }
-                    PhotosPicker(selection: $photo, matching: .images) { Label("Choisir dans la photothèque", systemImage: "photo") }
+                    Section {
+                        Button { cam = true } label: { Label("Prendre une photo du plat", systemImage: "camera.fill") }
+                        PhotosPicker(selection: $photo, matching: .images) { Label("Choisir dans la photothèque", systemImage: "photo") }
+                        TextField("Corriger ou préciser l’aliment", text: $text)
+                            .onSubmit(searchLocalFood)
+                        Button("Rechercher dans la base hors ligne", action: searchLocalFood)
+                            .disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
+                        if !photoStatus.isEmpty {
+                            Text(photoStatus).font(.footnote).foregroundStyle(.secondary)
+                        }
+                    } header: {
+                        Text("Reconnaissance sur l’iPhone")
+                    } footer: {
+                        Text("L’analyse de la photo fonctionne sans Internet et sans compte. Elle identifie des aliments probables ; les quantités et calories doivent être vérifiées.")
+                    }
                 } else {
                     TextField(mode == 0 ? "Ex. haribo, yaourt grec, banane…" : "Ex. 2 œufs, 1 tranche de pain complet", text: $text).onSubmit(go)
                     Button(mode == 0 ? "Rechercher" : "Estimer", action: go).disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -116,6 +165,7 @@ struct AddFoodView: View {
                     if !Task.isCancelled { hits = Ciqual.search(q) + off; cands = []; picked = nil }
                 }
             }
+            .onChange(of: mode) { _, _ in photoStatus = ""; err = ""; hits = []; picked = nil }
             .fullScreenCover(isPresented: $cam) { CameraView { analyze($0) }.ignoresSafeArea() }
             .fullScreenCover(isPresented: $scanning) { ScannerSheet { code in scanning = false; lookup(code) } }
         }
