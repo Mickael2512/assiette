@@ -84,7 +84,6 @@ enum OnDeviceFoodRecognition {
 
         let raw = try await Task.detached(priority: .userInitiated) { () throws -> [(String, Float)] in
             let request = VNClassifyImageRequest()
-            request.imageCropAndScaleOption = .centerCrop
             try VNImageRequestHandler(data: data, options: [:]).perform([request])
             return (request.results ?? []).prefix(15).map { ($0.identifier, $0.confidence) }
         }.value
