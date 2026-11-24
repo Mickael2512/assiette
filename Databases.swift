@@ -202,7 +202,11 @@ enum Ciqual {
 
     static func load() {
         rows = []
-        guard let data = try? Data(contentsOf: file),
+        // La version officielle CIQUAL est embarquée dans le bundle de l’app.
+        // Le fichier importé par l’utilisateur reste prioritaire pour permettre une mise à jour manuelle.
+        let bundledURL = Bundle.main.url(forResource: "ciqual", withExtension: "csv")
+        let sourceURL = FileManager.default.fileExists(atPath: file.path) ? file : bundledURL
+        guard let sourceURL, let data = try? Data(contentsOf: sourceURL),
               let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else { return }
         let firstLine = text.components(separatedBy: .newlines).first ?? ""
         let separator: Character = firstLine.contains(";") ? ";" : (firstLine.contains("\t") ? "\t" : ",")
@@ -246,11 +250,29 @@ enum Ciqual {
     }
 
     static func search(_ query: String) -> [OFFResult] {
-        let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !term.isEmpty else { return [] }
-        return Array(rows.filter {
-            $0.name.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil
-        }.prefix(30))
+        let term = FoodSearch.normalize(query)
+        guard term.count >= 2 else { return [] }
+        let tokens = term.split(separator: " ").map(String.init)
+        let aliases: [String: [String]] = [
+            "oeuf": ["oeuf", "oeufs", "omelette", "omelette", "jaune d oeuf", "blanc d oeuf"],
+            "pain de mie": ["pain de mie", "pain mie"],
+            "poulet": ["poulet", "volaille"],
+            "pomme de terre": ["pomme de terre", "pommes de terre", "patate"],
+            "pates": ["pates", "pasta", "spaghetti", "macaroni"],
+            "riz": ["riz", "riz blanc", "riz complet"]
+        ]
+        let expanded = aliases[term] ?? [term]
+        return rows.compactMap { item -> (OFFResult, Int)? in
+            let name = FoodSearch.normalize(item.name)
+            let exactAlias = expanded.first(where: { name.contains($0) })
+            let allTokens = tokens.allSatisfy { name.contains($0) }
+            guard exactAlias != nil || allTokens else { return nil }
+            let score = FoodSearch.score(name: item.name, query: term) + (exactAlias == term ? 200 : 0)
+            return (item, score)
+        }
+        .sorted { $0.1 > $1.1 }
+        .prefix(50)
+        .map(\.0)
     }
 
     static func importFile(_ url: URL) throws {
