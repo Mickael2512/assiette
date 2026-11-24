@@ -91,9 +91,15 @@ struct AddFoodView: View {
         guard !q.isEmpty else { return }
         run {
             if mode == 0 {
-                async let off = (try? await FoodDB.search(q)) ?? []
-                hits = Ciqual.search(q) + (await off); cands = []; picked = nil
-                if hits.isEmpty { err = "Aucun résultat dans CIQUAL et Open Food Facts." }
+                let local = Ciqual.search(q)
+                let branded = (try? await FoodDB.search(q)) ?? []
+                hits = FoodSearch.merge(ciqual: local, products: branded, query: q)
+                cands = []; picked = nil
+                if hits.isEmpty {
+                    err = Ciqual.rows.isEmpty
+                        ? "La base CIQUAL intégrée est indisponible et aucun produit n’a été trouvé en ligne."
+                        : "Aucun résultat. Essayez un terme plus court ou scannez le code-barres."
+                }
             } else {
                 hits = Ciqual.search(q)
                 cands = []
@@ -145,7 +151,7 @@ struct AddFoodView: View {
                         Text("La photo est analysée par une IA multimodale sécurisée. Les ingrédients sont rapprochés de CIQUAL ; les macros proviennent de la base nutritionnelle. Les poids restent des estimations à vérifier avant validation.")
                     }
                 } else {
-                    TextField(mode == 0 ? "Ex. yaourt grec, banane…" : "Nom exact ou approchant d’un aliment", text: $text).onSubmit(go)
+                    TextField(mode == 0 ? "Ex. œuf, pain de mie, yaourt grec…" : "Nom exact ou approchant d’un aliment", text: $text).onSubmit(go)
                     Button(mode == 0 ? "Rechercher dans les bases" : "Rechercher hors ligne", action: go).disabled(text.trimmingCharacters(in: .whitespaces).isEmpty)
                     if mode == 0 {
                         Button { scanning = true } label: { Label("Scanner un code-barres", systemImage: "barcode.viewfinder") }
@@ -193,14 +199,22 @@ struct AddFoodView: View {
                 guard mode == 0 else { return }
                 searchTask?.cancel()
                 let q = v.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard q.count >= 3 else { hits = []; return }
+                guard q.count >= 2 else { hits = []; return }
                 searchTask = Task {
-                    try? await Task.sleep(nanoseconds: 450_000_000)
+                    // Affiche d'abord les résultats locaux, puis enrichit avec les produits de marque.
+                    let local = Ciqual.search(q)
                     guard !Task.isCancelled else { return }
-                    async let off = (try? await FoodDB.search(q)) ?? []
-                    let results = Ciqual.search(q) + (await off)
-                    guard !Task.isCancelled else { return }
-                    hits = results
+                    hits = FoodSearch.merge(ciqual: local, products: [], query: q)
+                    do {
+                        try await Task.sleep(nanoseconds: 280_000_000)
+                        guard !Task.isCancelled else { return }
+                        let branded = try await FoodDB.search(q)
+                        guard !Task.isCancelled else { return }
+                        hits = FoodSearch.merge(ciqual: local, products: branded, query: q)
+                    } catch {
+                        guard !Task.isCancelled else { return }
+                        if local.isEmpty { err = "Produits de marque indisponibles. Vérifiez votre connexion Internet." }
+                    }
                     cands = []
                     picked = nil
                 }
