@@ -45,11 +45,31 @@ enum FoodPhotoAI {
             throw AIError.bad("Réponse invalide du service d’analyse.")
         }
         guard (200..<300).contains(http.statusCode) else {
-            let message = (try? JSONSerialization.jsonObject(with: responseData) as? [String: Any])?["error"] as? String
-            if http.statusCode == 429 || http.statusCode == 502 || http.statusCode == 503 {
-                throw AIError.bad("Le service d’analyse est momentanément indisponible ou a atteint son quota. Réessayez plus tard.")
+            let payload = (try? JSONSerialization.jsonObject(with: responseData)) as? [String: Any] ?? [:]
+            let code = payload["code"] as? String ?? ""
+            let providerStatus = payload["providerStatus"] as? Int
+            let providerMessage = payload["providerMessage"] as? String
+            switch providerStatus {
+            case 400, 401, 403:
+                throw AIError.bad("La configuration de Gemini semble incorrecte (erreur \(providerStatus!)). Vérifiez la clé API et l’activation de l’API Generative Language dans Google AI Studio.")
+            case 429:
+                throw AIError.bad("Le quota Gemini est atteint ou la fréquence des demandes est trop élevée. Vérifiez les limites du projet Google AI Studio et réessayez plus tard.")
+            case 500, 502, 503, 504:
+                throw AIError.bad("Gemini rencontre momentanément un problème (erreur \(providerStatus!)). Réessayez dans quelques instants.")
+            default:
+                if code == "RATE_LIMIT" || http.statusCode == 429 {
+                    throw AIError.bad("Assiette a reçu trop de demandes en peu de temps. Réessayez dans une minute.")
+                }
+                if code == "MISSING_API_KEY" {
+                    throw AIError.bad("La clé API Gemini n’est pas configurée sur le serveur.")
+                }
+                if code == "UPSTREAM_NETWORK_ERROR" {
+                    throw AIError.bad("Le serveur Assiette n’arrive pas à joindre Gemini. Vérifiez votre connexion et réessayez.")
+                }
+                let message = payload["error"] as? String ?? "L’analyse du plat a échoué (HTTP \(http.statusCode))."
+                let detail = providerMessage.map { " Détail : \($0)" } ?? ""
+                throw AIError.bad(message + detail)
             }
-            throw AIError.bad(message ?? "L’analyse du plat a échoué (HTTP \(http.statusCode)).")
         }
         do {
             let result = try JSONDecoder().decode(FoodPhotoAnalysis.self, from: responseData)
