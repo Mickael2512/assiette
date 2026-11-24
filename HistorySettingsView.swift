@@ -220,7 +220,7 @@ struct SettingsView: View {
                     Text(nCiqual > 0 ? "CIQUAL chargé : \(nCiqual) aliments" : "CIQUAL non chargé").font(.footnote).foregroundStyle(.secondary)
                     if !ciqualError.isEmpty { Text(ciqualError).font(.footnote).foregroundStyle(.red) }
                 } header: { Text("Bases alimentaires") } footer: {
-                    Text("CIQUAL 2025 est la base française de référence. Exportez l’onglet « composition nutritionnelle » en CSV UTF-8 avant l’import. Données : Anses, Table de composition nutritionnelle des aliments Ciqual 2025 — Licence Ouverte 2.0.")
+                    Text("CIQUAL 2025 (3 484 aliments, 74 constituants) est embarqué dans l’application et fonctionne hors ligne. Open Food Facts complète la recherche en ligne avec les produits commerciaux et les marques. Données CIQUAL : Anses, Licence Ouverte 2.0.")
                 }
                 Section("Données") { Button("Effacer tout le journal", role: .destructive) { wipe = true } }
             }
