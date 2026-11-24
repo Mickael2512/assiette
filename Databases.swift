@@ -249,30 +249,115 @@ enum Ciqual {
         }
     }
 
-    static func search(_ query: String) -> [OFFResult] {
-        let term = FoodSearch.normalize(query)
-        guard term.count >= 2 else { return [] }
-        let tokens = term.split(separator: " ").map(String.init)
-        let aliases: [String: [String]] = [
-            "oeuf": ["oeuf", "oeufs", "omelette", "omelette", "jaune d oeuf", "blanc d oeuf"],
-            "pain de mie": ["pain de mie", "pain mie"],
-            "poulet": ["poulet", "volaille"],
-            "pomme de terre": ["pomme de terre", "pommes de terre", "patate"],
-            "pates": ["pates", "pasta", "spaghetti", "macaroni"],
-            "riz": ["riz", "riz blanc", "riz complet"]
+    private static let concepts: [[String]] = [
+        ["oeuf", "omelette", "jaune d oeuf", "blanc d oeuf", "oeuf dur", "oeuf au plat", "oeuf poche", "oeuf brouille", "oeuf a la coque", "oeuf mollet"],
+        ["pain de mie", "pain mie", "toast", "pain grille"],
+        ["poulet", "volaille", "blanc de poulet", "filet de poulet", "cuisse de poulet", "poulet roti"],
+        ["pomme de terre", "pommes de terre", "patate", "pommes vapeur", "frites", "puree"],
+        ["pates", "pate", "pasta", "spaghetti", "macaroni", "penne", "coquillettes", "tagliatelles"],
+        ["riz", "riz blanc", "riz complet", "riz basmati", "riz thai"],
+        ["boeuf", "bœuf", "steak", "steak hache", "viande hachee"],
+        ["porc", "cochon", "jambon", "longe de porc", "cote de porc"],
+        ["saumon", "truite", "poisson gras"],
+        ["thon", "thon en boite"],
+        ["yaourt", "yogourt", "yoghourt", "fromage blanc"],
+        ["lait", "lait demi ecreme", "lait entier", "lait ecreme"],
+        ["fromage", "emmental", "comte", "cheddar", "mozzarella", "parmesan"],
+        ["pomme", "pommes", "compote de pomme"],
+        ["banane", "bananes"],
+        ["tomate", "tomates", "tomate cerise"],
+        ["carotte", "carottes"],
+        ["courgette", "courgettes"],
+        ["brocoli", "brocolis"],
+        ["lentille", "lentilles"],
+        ["pois chiche", "pois chiches", "chiche"],
+        ["haricot", "haricots", "haricot vert", "haricots verts"],
+        ["pain", "baguette", "pain complet", "pain blanc", "pain aux cereales"],
+        ["crevette", "crevettes", "gambas"],
+        ["avocat", "avocats"],
+        ["amande", "amandes"],
+        ["noix", "noix de cajou", "noisette", "noisettes"]
+    ]
+
+    private static func singularize(_ value: String) -> String {
+        var result = value
+        let replacements = [
+            ("oeufs", "oeuf"), ("pommes", "pomme"), ("pates", "pate"),
+            ("spaghettis", "spaghetti"), ("lentilles", "lentille"),
+            ("carottes", "carotte"), ("tomates", "tomate"), ("courgettes", "courgette"),
+            ("brocolis", "brocoli"), ("bananes", "banane"), ("crevettes", "crevette"),
+            ("amandes", "amande"), ("noisettes", "noisette"), ("haricots", "haricot"),
+            ("pois chiches", "pois chiche")
         ]
-        let expanded = aliases[term] ?? [term]
-        return rows.compactMap { item -> (OFFResult, Int)? in
-            let name = FoodSearch.normalize(item.name)
-            let exactAlias = expanded.first(where: { name.contains($0) })
-            let allTokens = tokens.allSatisfy { name.contains($0) }
-            guard exactAlias != nil || allTokens else { return nil }
-            let score = FoodSearch.score(name: item.name, query: term) + (exactAlias == term ? 200 : 0)
-            return (item, score)
+        for (plural, singular) in replacements {
+            result = result.replacingOccurrences(of: plural, with: singular)
         }
-        .sorted { $0.1 > $1.1 }
-        .prefix(50)
-        .map(\.0)
+        return result
+    }
+
+    private static func isOneEditAway(_ lhs: String, _ rhs: String) -> Bool {
+        let a = Array(lhs), b = Array(rhs)
+        guard abs(a.count - b.count) <= 1, min(a.count, b.count) >= 5 else { return false }
+        var i = 0, j = 0, edits = 0
+        while i < a.count && j < b.count {
+            if a[i] == b[j] { i += 1; j += 1; continue }
+            edits += 1
+            if edits > 1 { return false }
+            if a.count > b.count { i += 1 }
+            else if b.count > a.count { j += 1 }
+            else { i += 1; j += 1 }
+        }
+        if i < a.count || j < b.count { edits += 1 }
+        return edits <= 1
+    }
+
+    static func search(_ query: String) -> [OFFResult] {
+        let term = singularize(FoodSearch.normalize(query))
+        guard term.count >= 2 else { return [] }
+        let tokens = term.split(separator: " ").map(String.init).filter { $0.count > 1 }
+        guard !tokens.isEmpty else { return [] }
+
+        let concept = concepts.first { aliases in
+            aliases.contains(where: { alias in
+                let normalized = singularize(FoodSearch.normalize(alias))
+                return term == normalized || term.contains(normalized) ||
+                    (normalized.split(separator: " ").count == 1 && tokens.contains(normalized))
+            })
+        }
+
+        var ranked: [(item: OFFResult, score: Int)] = []
+        var seen = Set<String>()
+        for item in rows {
+            let name = singularize(FoodSearch.normalize(item.name))
+            guard !name.isEmpty else { continue }
+            let nameTokens = name.split(separator: " ").map(String.init)
+            let allTokens = tokens.allSatisfy { token in
+                nameTokens.contains(where: { $0.contains(token) || (token.count >= 5 && isOneEditAway(token, $0)) })
+            }
+            let conceptMatch = concept?.contains(where: { alias in
+                name.contains(singularize(FoodSearch.normalize(alias)))
+            }) ?? false
+            guard allTokens || conceptMatch else { continue }
+
+            var score = FoodSearch.score(name: item.name, query: term)
+            if name == term { score += 1600 }
+            else if name.hasPrefix(term) { score += 900 }
+            else if name.contains(term) { score += 650 }
+            if allTokens { score += 250 }
+            if conceptMatch { score += 180 }
+            // Les résultats dont le nom correspond précisément à la préparation demandée passent devant les variantes génériques.
+            if term.contains("au plat") && name.contains("au plat") { score += 500 }
+            if term.contains("dur") && name.contains("dur") { score += 500 }
+            if term.contains("complet") && name.contains("complet") { score += 350 }
+            if term.contains("demi ecreme") && name.contains("demi ecreme") { score += 350 }
+            let key = FoodSearch.normalize(item.name)
+            if seen.insert(key).inserted { ranked.append((item, score)) }
+        }
+
+        return ranked.sorted {
+            if $0.score != $1.score { return $0.score > $1.score }
+            return $0.item.name.localizedStandardCompare($1.item.name) == .orderedAscending
+        }.prefix(60).map(\.item)
     }
 
     static func importFile(_ url: URL) throws {
