@@ -16,6 +16,8 @@ targets:
     sources:
       - path: .
         excludes: ["project.yml", "build.yml", "README.md", ".github", ".git", "docs", "Config"]
+    resources:
+      - path: Resources/ciqual.csv
     info:
       path: Config/Info.plist
       properties:
