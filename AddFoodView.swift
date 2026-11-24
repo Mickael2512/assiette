@@ -129,6 +129,24 @@ struct AddFoodView: View {
         }
     }
 
+    var matchingSavedMeals: [SavedMeal] {
+        let query = FoodSearch.normalize(text)
+        return store.savedMeals
+            .filter { query.isEmpty || FoodSearch.normalize($0.title).contains(query) ||
+                FoodSearch.normalize($0.items.map(\.name).joined(separator: " ")).contains(query) }
+            .sorted { $0.created > $1.created }
+            .prefix(8).map { $0 }
+    }
+
+    func add(_ savedMeal: SavedMeal) {
+        guard !savedMeal.items.isEmpty else { return }
+        for item in savedMeal.items {
+            store.add(Entry(date: day, meal: meal, name: item.name,
+                            detail: item.detail, m: item.m, source: "Repas enregistré"))
+        }
+        dismiss()
+    }
+
     var matchingRecipes: [Recipe] {
         let query = FoodSearch.normalize(text)
         let tokens = query.split(separator: " ").map(String.init)
@@ -201,6 +219,27 @@ struct AddFoodView: View {
                 }
                 if busy { HStack { ProgressView(); Text("Analyse…").foregroundStyle(.secondary) } }
                 if !err.isEmpty { Text(err).foregroundStyle(.red) }
+                if !matchingSavedMeals.isEmpty {
+                    Section(text.isEmpty ? "Mes repas enregistrés" : "Mes repas") {
+                        ForEach(matchingSavedMeals) { savedMeal in
+                            Button { add(savedMeal) } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "tray.full.fill")
+                                        .foregroundStyle(.orange)
+                                        .frame(width: 34, height: 34)
+                                        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(savedMeal.title).foregroundStyle(.primary)
+                                        Text("\(savedMeal.items.count) aliments · \(Int(savedMeal.total.kcal.rounded())) kcal")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "plus.circle.fill").foregroundStyle(.green)
+                                }
+                            }
+                        }
+                    }
+                }
                 if !matchingRecipes.isEmpty {
                     Section(text.isEmpty ? "Mes recettes et repas enregistrés" : "Dans ma bibliothèque") {
                         ForEach(matchingRecipes) { recipe in
