@@ -14,7 +14,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - run: brew install xcodegen
+      - run: brew install xcodegen librsvg
+      - name: Generate app icon
+        run: |
+          mkdir -p Assets.xcassets/AppIcon.appiconset
+          rsvg-convert -w 1024 -h 1024 Assets.xcassets/AppIcon.appiconset/AppIcon.svg > Assets.xcassets/AppIcon.appiconset/AppIcon.png
       - run: xcodegen generate
       - run: |
           xcodebuild -project Assiette.xcodeproj -scheme Assiette -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
