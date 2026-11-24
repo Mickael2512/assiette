@@ -2,6 +2,7 @@ export interface Env {
   GEMINI_API_KEY: string;
   GEMINI_MODEL?: string;
   ALLOWED_ORIGINS?: string;
+  AI_RATE_LIMITER: { limit: (options: { key: string }) => Promise<{ success: boolean }> };
 }
 
 const cors = (request: Request, env: Env) => {
@@ -33,6 +34,10 @@ export default {
     if (url.pathname !== "/v1/analyze-food" || request.method !== "POST") {
       return json({ error: "Not found" }, 404, headers);
     }
+    const clientIP = request.headers.get("CF-Connecting-IP") ?? "unknown";
+    const rate = await env.AI_RATE_LIMITER.limit({ key: clientIP });
+    if (!rate.success) return json({ error: "Trop de demandes. Réessaie dans une minute." }, 429, headers);
+
     if (!env.GEMINI_API_KEY) return json({ error: "AI service is not configured." }, 503, headers);
 
     const length = Number(request.headers.get("Content-Length") ?? "0");
