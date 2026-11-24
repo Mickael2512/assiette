@@ -115,6 +115,20 @@ enum FoodSearch {
         let brandMatched = tokens.filter { b.contains($0) }.count
         return matched * 100 + brandMatched * 25
     }
+
+    static func merge(ciqual: [OFFResult], products: [OFFResult], query: String) -> [OFFResult] {
+        var seen = Set<String>()
+        let combined = ciqual + products
+        let unique = combined.filter { item in
+            let key = normalize(item.name) + "|" + normalize(item.brand)
+            return seen.insert(key).inserted
+        }
+        return unique.sorted {
+            let left = score(name: $0.name, brand: $0.brand, query: query) + ($0.source == "CIQUAL" ? 15 : 0)
+            let right = score(name: $1.name, brand: $1.brand, query: query) + ($1.source == "CIQUAL" ? 15 : 0)
+            return left > right
+        }
+    }
 }
 
 enum Importer {
