@@ -19,9 +19,11 @@ jobs:
         run: |
           mkdir -p Assets.xcassets/AppIcon.appiconset
           rsvg-convert -w 1024 -h 1024 Assets.xcassets/AppIcon.appiconset/AppIcon.svg > Assets.xcassets/AppIcon.appiconset/AppIcon.png
+          test -s Assets.xcassets/AppIcon.appiconset/AppIcon.png
       - run: xcodegen generate
       - run: |
-          xcodebuild -project Assiette.xcodeproj -scheme Assiette -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          xcodebuild -project Assiette.xcodeproj -scheme Assiette -configuration Release -sdk iphoneos -derivedDataPath build ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIcons:CFBundlePrimaryIcon" build/Build/Products/Release-iphoneos/Assiette.app/Info.plist
           mkdir Payload
           cp -R build/Build/Products/Release-iphoneos/Assiette.app Payload/
           zip -r Assiette.ipa Payload
