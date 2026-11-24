@@ -19,18 +19,31 @@ jobs:
           python3 -m venv .ci-venv
           .ci-venv/bin/pip install --disable-pip-version-check openpyxl requests
           .ci-venv/bin/python - <<'PY'
-          import csv, io, os, requests
+          import csv, io, os, requests, time
+          from requests.adapters import HTTPAdapter
+          from urllib3.util.retry import Retry
           from openpyxl import load_workbook
+
+          session = requests.Session()
+          retry = Retry(total=6, connect=6, read=6, backoff_factor=2,
+                        status_forcelist=[429, 500, 502, 503, 504],
+                        allowed_methods=["GET"])
+          session.mount("https://", HTTPAdapter(max_retries=retry))
+          session.headers.update({"User-Agent": "Assiette-CIQUAL-Bundler/1.0"})
+
           api = "https://entrepot.recherche.data.gouv.fr/api/datasets/:persistentId/"
-          response = requests.get(api, params={"persistentId": "doi:10.57745/RDMHWY"}, timeout=60)
+          response = session.get(api, params={"persistentId": "doi:10.57745/RDMHWY"}, timeout=(20, 90))
           response.raise_for_status()
           payload = response.json()["data"]["latestVersion"]["files"]
           match = next((item for item in payload if "Table Ciqual 2025_FR_2025_11_03.xlsx" in item.get("label", "")), None)
           if not match:
               raise SystemExit("Official CIQUAL 2025 XLSX not found in the published dataset.")
           file_id = match["dataFile"]["id"]
-          download = requests.get(f"https://entrepot.recherche.data.gouv.fr/api/access/datafile/{file_id}", timeout=120)
+          download_url = f"https://entrepot.recherche.data.gouv.fr/api/access/datafile/{file_id}"
+          download = session.get(download_url, timeout=(30, 180))
           download.raise_for_status()
+          if len(download.content) < 100_000:
+              raise SystemExit(f"CIQUAL download too small: {len(download.content)} bytes")
           workbook = load_workbook(io.BytesIO(download.content), read_only=True, data_only=True)
           sheet = next((s for s in workbook.worksheets if "composition" in s.title.lower()), workbook.worksheets[0])
           os.makedirs("Resources", exist_ok=True)
