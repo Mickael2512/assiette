@@ -16,8 +16,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Download and bundle official CIQUAL 2025 database
         run: |
-          python3 -m pip install --user openpyxl requests
-          python3 - <<'PY'
+          python3 -m venv .ci-venv
+          .ci-venv/bin/pip install --disable-pip-version-check openpyxl requests
+          .ci-venv/bin/python - <<'PY'
           import csv, io, os, requests
           from openpyxl import load_workbook
           api = "https://entrepot.recherche.data.gouv.fr/api/datasets/:persistentId/"
