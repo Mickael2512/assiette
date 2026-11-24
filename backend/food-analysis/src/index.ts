@@ -31,6 +31,61 @@ export default {
     if (url.pathname === "/health" && request.method === "GET") {
       return json({ ok: true, service: "assiette-food-analysis" }, 200, headers);
     }
+    if (url.pathname === "/v1/parse-recipe" && request.method === "POST") {
+      const clientIP = request.headers.get("CF-Connecting-IP") ?? "unknown";
+      const rate = await env.AI_RATE_LIMITER.limit({ key: clientIP });
+      if (!rate.success) return json({ error: "Trop de demandes. Réessaie dans une minute.", code: "RATE_LIMIT" }, 429, headers);
+      if (!env.GEMINI_API_KEY) return json({ error: "Le service IA n’est pas configuré.", code: "MISSING_API_KEY" }, 503, headers);
+      let input: { text?: string; locale?: string };
+      try { input = await request.json() as typeof input; }
+      catch { return json({ error: "Requête invalide." }, 400, headers); }
+      const sourceText = (input.text ?? "").trim().slice(0, 14000);
+      if (sourceText.length < 40) return json({ error: "Pas assez de texte lisible pour extraire une recette.", code: "INSUFFICIENT_TEXT" }, 422, headers);
+      const schema = {
+        type: "OBJECT",
+        properties: {
+          title: { type: "STRING" },
+          servings: { type: "INTEGER" },
+          ingredients: { type: "ARRAY", items: { type: "STRING" } },
+          steps: { type: "ARRAY", items: { type: "STRING" } }
+        },
+        required: ["title", "servings", "ingredients", "steps"]
+      };
+      const prompt = `Tu extrais une recette de cuisine à partir du texte OCR d'une page de livre ou magazine. Le texte peut contenir des erreurs OCR, des en-têtes, numéros de page ou éléments parasites. Reconstitue uniquement les informations réellement présentes ou clairement déductibles. N'invente jamais de quantités, d'ingrédients ou de durées absents. Conserve les quantités et unités telles qu'imprimées. Le titre doit être court. ingredients doit contenir une ligne par ingrédient avec sa quantité. steps doit contenir les étapes dans l'ordre, reformulées uniquement pour corriger les erreurs OCR sans changer le sens. Si une donnée est illisible, omets-la plutôt que de l'inventer. Réponds en français. Locale: ${input.locale ?? "fr-FR"}. Texte OCR:\n\n${sourceText}`;
+      const model = env.GEMINI_MODEL ?? "gemini-2.5-flash";
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+      let upstream: Response;
+      try {
+        upstream = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
+          body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.1, responseMimeType: "application/json", responseSchema: schema, maxOutputTokens: 2200 } })
+        });
+      } catch {
+        return json({ error: "Impossible de joindre le service IA.", code: "UPSTREAM_NETWORK_ERROR" }, 502, headers);
+      }
+      if (!upstream.ok) {
+        const raw = await upstream.text();
+        let providerMessage = "Erreur du fournisseur IA.";
+        try { providerMessage = JSON.parse(raw)?.error?.message ?? providerMessage; } catch {}
+        console.error("gemini_recipe_error", JSON.stringify({ status: upstream.status, message: String(providerMessage).slice(0, 400) }));
+        return json({ error: "Impossible d’extraire la recette.", code: "GEMINI_ERROR", providerStatus: upstream.status }, 502, headers);
+      }
+      const payload = await upstream.json() as any;
+      const output = payload?.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? "").join("") ?? "";
+      try {
+        const recipe = JSON.parse(output);
+        if (typeof recipe.title !== "string" || !recipe.title.trim() || !Array.isArray(recipe.ingredients) || recipe.ingredients.length === 0) {
+          return json({ error: "Aucun titre ou ingrédient exploitable n’a été trouvé.", code: "RECIPE_NOT_FOUND" }, 422, headers);
+        }
+        return json({ title: recipe.title.trim(), servings: Math.max(1, Math.min(30, Number(recipe.servings) || 1)),
+          ingredients: recipe.ingredients.filter((v: any) => typeof v === "string").slice(0, 80),
+          steps: Array.isArray(recipe.steps) ? recipe.steps.filter((v: any) => typeof v === "string").slice(0, 80) : [] }, 200, headers);
+      } catch {
+        return json({ error: "La recette extraite est inexploitable.", code: "INVALID_RECIPE_JSON" }, 502, headers);
+      }
+    }
     if (url.pathname !== "/v1/analyze-food" || request.method !== "POST") {
       return json({ error: "Not found" }, 404, headers);
     }
