@@ -106,12 +106,20 @@ Les ingrédients doivent être atomiques et exploitables pour une recherche Ciqu
     });
 
     if (!upstream.ok) {
-      const detail = (await upstream.text()).slice(0, 1200);
-      return json({ error: "Food analysis provider error.", providerStatus: upstream.status, detail }, 502, headers);
+      const raw = await upstream.text();
+      let providerMessage = "Erreur du fournisseur IA.";
+      try { providerMessage = JSON.parse(raw)?.error?.message ?? providerMessage; } catch {}
+      providerMessage = String(providerMessage).slice(0, 500);
+      console.error("gemini_provider_error", JSON.stringify({ status: upstream.status, message: providerMessage }));
+      return json({ error: "Le fournisseur IA a refusé la demande.", code: "GEMINI_ERROR", providerStatus: upstream.status, providerMessage }, 502, headers);
     }
     const payload = await upstream.json() as any;
     const text = payload?.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? "").join("") ?? "";
-    if (!text) return json({ error: "The AI returned no analysis." }, 502, headers);
+    if (!text) {
+      const reason = payload?.promptFeedback?.blockReason ?? payload?.candidates?.[0]?.finishReason ?? "EMPTY_RESPONSE";
+      console.error("gemini_empty_response", String(reason));
+      return json({ error: "Le service IA n'a renvoyé aucune analyse.", code: "EMPTY_AI_RESPONSE", providerMessage: String(reason) }, 502, headers);
+    }
 
     try {
       const result = JSON.parse(text);
@@ -131,7 +139,8 @@ Les ingrédients doivent être atomiques et exploitables pour une recherche Ciqu
       result.overallConfidence = Math.min(1, Math.max(0, Number(result.overallConfidence) || 0));
       return json(result, 200, headers);
     } catch {
-      return json({ error: "The AI response was not valid JSON." }, 502, headers);
+      console.error("gemini_invalid_json_response");
+      return json({ error: "La réponse du service IA est inexploitable.", code: "INVALID_AI_JSON" }, 502, headers);
     }
   }
 };
