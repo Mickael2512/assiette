@@ -152,6 +152,40 @@ struct ImportView: View {
     @State private var text = ""
     @State private var busy = false
     @State private var err = ""
+    @State private var photo: PhotosPickerItem?
+    @State private var camera = false
+    @State private var parsedFromPhoto = false
+
+    func analyzeRecipePhoto(_ image: UIImage) {
+        busy = true
+        err = ""
+        Task {
+            do {
+                let dto = try await RecipePhotoAI.analyze(image)
+                text = RecipePhotoAI.editableText(dto)
+                mode = 1
+                parsedFromPhoto = true
+            } catch { err = error.localizedDescription }
+            busy = false
+        }
+    }
+
+    func analyzeSelectedPhoto(_ item: PhotosPickerItem?) {
+        guard let item else { return }
+        busy = true
+        err = ""
+        Task {
+            do {
+                guard let data = try await item.loadTransferable(type: Data.self),
+                      let image = UIImage(data: data) else { throw AIError.bad("Photo illisible.") }
+                let dto = try await RecipePhotoAI.analyze(image)
+                text = RecipePhotoAI.editableText(dto)
+                mode = 1
+                parsedFromPhoto = true
+            } catch { err = error.localizedDescription }
+            busy = false
+        }
+    }
 
     func save(_ dto: RecipeDTO, image: Data?, url: String?) throws {
         guard let title = dto.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else {
@@ -206,25 +240,39 @@ struct ImportView: View {
                 Picker("", selection: $mode) {
                     Text("Lien").tag(0)
                     Text("Texte").tag(1)
+                    Text("Photo").tag(2)
                 }
                 .pickerStyle(.segmented)
                 .listRowBackground(Color.clear)
 
                 Section {
-                    TextField(mode == 0 ? "https://…" : "Nom, ingrédients et préparation…", text: $text, axis: .vertical)
-                        .lineLimit(4...10)
-                    if mode == 0 {
-                        Button("Coller depuis le presse-papiers") { text = UIPasteboard.general.string ?? text }
+                    if mode == 2 {
+                        Button { camera = true } label: { Label("Photographier la recette", systemImage: "camera.fill") }
+                            .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera) || busy)
+                        PhotosPicker(selection: $photo, matching: .images) {
+                            Label("Choisir une photo ou un scan", systemImage: "photo")
+                        }
+                        .disabled(busy)
+                        Text("Assiette lit la page, extrait les ingrédients et les étapes, puis prépare une fiche modifiable. Photographiez la recette entière, bien à plat et avec une bonne lumière.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    } else {
+                        TextField(mode == 0 ? "https://…" : "Nom, ingrédients et préparation…", text: $text, axis: .vertical)
+                            .lineLimit(4...10)
+                        if mode == 0 {
+                            Button("Coller depuis le presse-papiers") { text = UIPasteboard.general.string ?? text }
+                        }
+                        Button(mode == 0 ? "Importer la recette" : "Enregistrer la recette", action: importContent)
+                            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || busy)
                     }
-                    Button(mode == 0 ? "Importer la recette" : "Enregistrer la recette", action: importContent)
-                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || busy)
                 } header: {
-                    Text(mode == 0 ? "Lien de la recette" : "Texte de la recette")
+                    Text(mode == 0 ? "Lien de la recette" : mode == 2 ? "Photo d’une recette" : "Vérifier la recette extraite")
                 } footer: {
                     if mode == 0 {
-                        Text("Assiette lit les données structurées Recipe (JSON-LD) publiées par le site. Aucun compte ni service d’IA n’est nécessaire. Certains sites bloquent l’accès ou ne publient pas ces données.")
+                        Text("Assiette lit les données structurées Recipe (JSON-LD) publiées par le site. Certains sites bloquent l’accès ou ne publient pas ces données.")
+                    } else if mode == 2 {
+                        Text("La reconnaissance de texte est effectuée sur l’iPhone. Le texte extrait est envoyé au service IA Assiette pour structurer la recette. Aucune calorie n’est inventée.")
                     } else {
-                        Text("Structure attendue : première ligne = titre, puis les sections « Ingrédients » et « Préparation ». Les valeurs nutritionnelles restent non renseignées tant qu’elles ne sont pas calculées à partir d’une base fiable.")
+                        Text(parsedFromPhoto ? "Vérifiez et corrigez le titre, les quantités et les étapes avant d’enregistrer." : "Structure attendue : première ligne = titre, puis les sections « Ingrédients » et « Préparation ».")
                     }
                 }
 
@@ -239,6 +287,12 @@ struct ImportView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Fermer") { dismiss() }
                 }
+            }
+            .onChange(of: photo) { _, item in analyzeSelectedPhoto(item) }
+            .fullScreenCover(isPresented: $camera) {
+                RecipeCameraPicker(onImage: { image in camera = false; analyzeRecipePhoto(image) },
+                                   onCancel: { camera = false })
+                    .ignoresSafeArea()
             }
         }
     }
