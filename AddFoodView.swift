@@ -129,6 +129,29 @@ struct AddFoodView: View {
         }
     }
 
+    var matchingRecipes: [Recipe] {
+        let query = FoodSearch.normalize(text)
+        return store.recipes
+            .filter { query.isEmpty || FoodSearch.normalize($0.title).contains(query) }
+            .sorted { $0.created > $1.created }
+            .prefix(8).map { $0 }
+    }
+
+    func add(_ recipe: Recipe) {
+        guard recipe.m.kcal > 0 else {
+            err = "Cette recette n’a pas encore de valeurs nutritionnelles. Complétez-la avant de l’ajouter."
+            return
+        }
+        store.add(Entry(date: day, meal: meal, name: recipe.title,
+                        detail: "1 portion · recette personnelle", m: recipe.m,
+                        source: "Ma bibliothèque"))
+        var updated = recipe
+        updated.cooked += 1
+        updated.lastCooked = Date()
+        store.put(updated)
+        dismiss()
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -160,6 +183,30 @@ struct AddFoodView: View {
                 }
                 if busy { HStack { ProgressView(); Text("Analyse…").foregroundStyle(.secondary) } }
                 if !err.isEmpty { Text(err).foregroundStyle(.red) }
+                if !matchingRecipes.isEmpty {
+                    Section(text.isEmpty ? "Mes recettes et repas enregistrés" : "Dans ma bibliothèque") {
+                        ForEach(matchingRecipes) { recipe in
+                            Button { add(recipe) } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "book.closed.fill")
+                                        .foregroundStyle(.green)
+                                        .frame(width: 34, height: 34)
+                                        .background(.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(recipe.title).foregroundStyle(.primary)
+                                        Text(recipe.m.kcal > 0
+                                             ? "Recette personnelle · 1 portion · \(Int(recipe.m.kcal.rounded())) kcal"
+                                             : "Valeurs nutritionnelles à compléter")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "plus.circle.fill").foregroundStyle(.green)
+                                }
+                            }
+                            .disabled(recipe.m.kcal <= 0)
+                        }
+                    }
+                }
                 if let p = picked {
                     Section("Quantité") {
                         TextField("Grammes", text: $grams).keyboardType(.decimalPad)
