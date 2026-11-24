@@ -15,7 +15,7 @@ targets:
     platform: iOS
     sources:
       - path: .
-        excludes: ["project.yml", "build.yml", "README.md", ".github", ".git", "docs", "Config"]
+        excludes: ["project.yml", "build.yml", "README.md", ".github", ".git", "docs", "Config", "Resources"]
     resources:
       - path: Resources/ciqual.csv
     info:
