@@ -49,7 +49,7 @@ enum FoodDB {
             .init(name: "search_simple", value: "1"),
             .init(name: "action", value: "process"),
             .init(name: "json", value: "1"),
-            .init(name: "page_size", value: "40"),
+            .init(name: "page_size", value: "100"),
             .init(name: "page", value: "1"),
             .init(name: "fields", value: "code,product_name,brands,quantity,nutriments")
         ]
@@ -105,15 +105,29 @@ enum FoodSearch {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private static func singular(_ value: String) -> String {
+        value.replacingOccurrences(of: "oeufs", with: "oeuf")
+            .replacingOccurrences(of: "pommes", with: "pomme")
+            .replacingOccurrences(of: "tomates", with: "tomate")
+            .replacingOccurrences(of: "carottes", with: "carotte")
+            .replacingOccurrences(of: "bananes", with: "banane")
+            .replacingOccurrences(of: "crevettes", with: "crevette")
+            .replacingOccurrences(of: "amandes", with: "amande")
+            .replacingOccurrences(of: "yaourts", with: "yaourt")
+    }
+
     static func score(name: String, brand: String = "", query: String) -> Int {
-        let n = normalize(name), b = normalize(brand), q = normalize(query)
-        if n == q { return 1000 }
-        if n.hasPrefix(q) { return 850 }
-        if n.contains(q) { return 700 }
-        let tokens = q.split(separator: " ").map(String.init)
-        let matched = tokens.filter { n.contains($0) }.count
-        let brandMatched = tokens.filter { b.contains($0) }.count
-        return matched * 100 + brandMatched * 25
+        let n = singular(normalize(name)), b = singular(normalize(brand)), q = singular(normalize(query))
+        if n == q { return 1500 }
+        if n.hasPrefix(q) { return 1200 }
+        if n.contains(q) { return 1000 }
+        let tokens = q.split(separator: " ").map(String.init).filter { $0.count > 1 }
+        let nameTokens = n.split(separator: " ").map(String.init)
+        let brandTokens = b.split(separator: " ").map(String.init)
+        let matched = tokens.filter { token in nameTokens.contains(where: { $0 == token || $0.hasPrefix(token) }) }.count
+        let brandMatched = tokens.filter { token in brandTokens.contains(where: { $0 == token || $0.hasPrefix(token) }) }.count
+        let all = !tokens.isEmpty && matched == tokens.count
+        return matched * 140 + brandMatched * 35 + (all ? 250 : 0)
     }
 
     static func merge(ciqual: [OFFResult], products: [OFFResult], query: String) -> [OFFResult] {
@@ -124,9 +138,10 @@ enum FoodSearch {
             return seen.insert(key).inserted
         }
         return unique.sorted {
-            let left = score(name: $0.name, brand: $0.brand, query: query) + ($0.source == "CIQUAL" ? 15 : 0)
-            let right = score(name: $1.name, brand: $1.brand, query: query) + ($1.source == "CIQUAL" ? 15 : 0)
-            return left > right
+            let left = score(name: $0.name, brand: $0.brand, query: query) + ($0.source == "CIQUAL" ? 35 : 0)
+            let right = score(name: $1.name, brand: $1.brand, query: query) + ($1.source == "CIQUAL" ? 35 : 0)
+            if left != right { return left > right }
+            return $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
     }
 }
