@@ -34,13 +34,20 @@ jobs:
           workbook = load_workbook(io.BytesIO(download.content), read_only=True, data_only=True)
           sheet = next((s for s in workbook.worksheets if "composition" in s.title.lower()), workbook.worksheets[0])
           os.makedirs("Resources", exist_ok=True)
+          all_rows = list(sheet.iter_rows(values_only=True))
+          header_index = next((i for i, row in enumerate(all_rows)
+                               if any("alim_nom_fr" in str(value).lower() or "nom français" in str(value).lower()
+                                      for value in row if value is not None)), None)
+          if header_index is None:
+              raise SystemExit(f"CIQUAL column header not found in worksheet: {sheet.title}")
+          data_rows = all_rows[header_index:]
           with open("Resources/ciqual.csv", "w", encoding="utf-8-sig", newline="") as output:
               writer = csv.writer(output, delimiter=";")
-              for row in sheet.iter_rows(values_only=True):
+              for row in data_rows:
                   writer.writerow(["" if value is None else value for value in row])
-          if os.path.getsize("Resources/ciqual.csv") < 100_000:
-              raise SystemExit("CIQUAL export is unexpectedly small; refusing to build without the database.")
-          print(f"Bundled CIQUAL sheet: {sheet.title}, {sheet.max_row} rows, {os.path.getsize('Resources/ciqual.csv')} bytes")
+          if len(data_rows) < 3000 or os.path.getsize("Resources/ciqual.csv") < 100_000:
+              raise SystemExit(f"CIQUAL export is incomplete: {len(data_rows)} rows, {os.path.getsize('Resources/ciqual.csv')} bytes")
+          print(f"Bundled CIQUAL sheet: {sheet.title}, header row {header_index + 1}, {len(data_rows) - 1} foods, {os.path.getsize('Resources/ciqual.csv')} bytes")
           PY
       - run: brew install xcodegen librsvg
       - name: Generate app icon
