@@ -38,19 +38,82 @@ struct RecipeDTO: Decodable {
 struct OFFResult: Identifiable { let id = UUID(); var name: String; var brand: String; var per100: Macros; var source = "Open Food Facts" }
 
 enum FoodDB {
-    static func search(_ q: String) async throws -> [OFFResult] {
-        var c = URLComponents(string: "https://fr.openfoodfacts.org/cgi/search.pl")!
-        c.queryItems = [("search_terms", q), ("search_simple", "1"), ("action", "process"), ("json", "1"), ("page_size", "20"), ("fields", "product_name,brands,nutriments")].map { URLQueryItem(name: $0.0, value: $0.1) }
-        var r = URLRequest(url: c.url!); r.setValue("Assiette/1.0 (iOS)", forHTTPHeaderField: "User-Agent")
-        let (d, _) = try await URLSession.shared.data(for: r)
-        guard let j = try JSONSerialization.jsonObject(with: d) as? [String: Any], let ps = j["products"] as? [[String: Any]] else { return [] }
-        return ps.compactMap { p -> OFFResult? in
-            guard let n = p["product_name"] as? String, !n.isEmpty, let nu = p["nutriments"] as? [String: Any] else { return nil }
-            func v(_ k: String) -> Double? { (nu[k] as? NSNumber)?.doubleValue ?? Double(nu[k] as? String ?? "") }
-            guard let kcal = v("energy-kcal_100g"), let protein = v("proteins_100g"),
-                  let fat = v("fat_100g"), let carbs = v("carbohydrates_100g") else { return nil }
-            return OFFResult(name: n, brand: p["brands"] as? String ?? "", per100: Macros(kcal: kcal, p: protein, l: fat, g: carbs))
+    private static let endpoint = URL(string: "https://fr.openfoodfacts.org/cgi/search.pl")!
+
+    static func search(_ query: String) async throws -> [OFFResult] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard q.count >= 2 else { return [] }
+        var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
+        components.queryItems = [
+            .init(name: "search_terms", value: q),
+            .init(name: "search_simple", value: "1"),
+            .init(name: "action", value: "process"),
+            .init(name: "json", value: "1"),
+            .init(name: "page_size", value: "40"),
+            .init(name: "page", value: "1"),
+            .init(name: "fields", value: "code,product_name,brands,quantity,nutriments")
+        ]
+        var request = URLRequest(url: components.url!)
+        request.timeoutInterval = 12
+        request.setValue("Assiette/1.0 (iOS; food search)", forHTTPHeaderField: "User-Agent")
+        request.setValue("fr", forHTTPHeaderField: "Accept-Language")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw AIError.bad("La recherche de produits de marque est momentanément indisponible.")
         }
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let products = json["products"] as? [[String: Any]] else { return [] }
+        let normalizedQuery = FoodSearch.normalize(q)
+        let tokens = normalizedQuery.split(separator: " ").map(String.init)
+        let results: [OFFResult] = products.compactMap { product in
+            guard let name = product["product_name"] as? String, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  let nutrients = product["nutriments"] as? [String: Any] else { return nil }
+            func number(_ keys: String...) -> Double? {
+                for key in keys {
+                    if let n = nutrients[key] as? NSNumber, n.doubleValue.isFinite { return n.doubleValue }
+                    if let s = nutrients[key] as? String, let n = Double(s), n.isFinite { return n }
+                }
+                return nil
+            }
+            let kcal = number("energy-kcal_100g") ?? number("energy-kcal_value") ?? number("energy_100g").map { $0 / 4.184 }
+            guard let kcal, let protein = number("proteins_100g"),
+                  let fat = number("fat_100g"), let carbs = number("carbohydrates_100g") else { return nil }
+            let brand = product["brands"] as? String ?? ""
+            let normalizedName = FoodSearch.normalize(name)
+            let normalizedBrand = FoodSearch.normalize(brand)
+            let haystack = normalizedName + " " + normalizedBrand
+            guard tokens.allSatisfy({ haystack.contains($0) }) || normalizedName.contains(normalizedQuery) else { return nil }
+            return OFFResult(name: name, brand: brand,
+                per100: Macros(kcal: kcal, p: protein, l: fat, g: carbs,
+                    fiber: number("fiber_100g"), sugars: number("sugars_100g"),
+                    saturatedFat: number("saturated-fat_100g"), sodium: number("sodium_100g")),
+                source: "Open Food Facts")
+        }
+        return results.sorted {
+            FoodSearch.score(name: $0.name, brand: $0.brand, query: normalizedQuery) >
+            FoodSearch.score(name: $1.name, brand: $1.brand, query: normalizedQuery)
+        }
+    }
+}
+
+enum FoodSearch {
+    static func normalize(_ value: String) -> String {
+        value.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "fr_FR"))
+            .replacingOccurrences(of: "œ", with: "oe")
+            .replacingOccurrences(of: "æ", with: "ae")
+            .replacingOccurrences(of: #"[^a-z0-9]+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func score(name: String, brand: String = "", query: String) -> Int {
+        let n = normalize(name), b = normalize(brand), q = normalize(query)
+        if n == q { return 1000 }
+        if n.hasPrefix(q) { return 850 }
+        if n.contains(q) { return 700 }
+        let tokens = q.split(separator: " ").map(String.init)
+        let matched = tokens.filter { n.contains($0) }.count
+        let brandMatched = tokens.filter { b.contains($0) }.count
+        return matched * 100 + brandMatched * 25
     }
 }
 
