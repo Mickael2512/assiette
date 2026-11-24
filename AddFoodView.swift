@@ -131,9 +131,27 @@ struct AddFoodView: View {
 
     var matchingRecipes: [Recipe] {
         let query = FoodSearch.normalize(text)
+        let tokens = query.split(separator: " ").map(String.init)
         return store.recipes
-            .filter { query.isEmpty || FoodSearch.normalize($0.title).contains(query) }
-            .sorted { $0.created > $1.created }
+            .filter { recipe in
+                guard !query.isEmpty else { return true }
+                let title = FoodSearch.normalize(recipe.title)
+                let ingredients = FoodSearch.normalize(recipe.ingredients.joined(separator: " "))
+                return title.contains(query) ||
+                    ingredients.contains(query) ||
+                    (!tokens.isEmpty && tokens.allSatisfy { token in
+                        title.contains(token) || ingredients.contains(token)
+                    })
+            }
+            .sorted {
+                if query.isEmpty { return $0.created > $1.created }
+                let lhs = FoodSearch.normalize($0.title)
+                let rhs = FoodSearch.normalize($1.title)
+                let lhsExact = lhs.hasPrefix(query)
+                let rhsExact = rhs.hasPrefix(query)
+                if lhsExact != rhsExact { return lhsExact }
+                return $0.created > $1.created
+            }
             .prefix(8).map { $0 }
     }
 
