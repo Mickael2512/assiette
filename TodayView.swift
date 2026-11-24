@@ -30,6 +30,9 @@ struct TodayView: View {
     @Environment(Store.self) var store
     @State private var day = Date()
     @State private var adding: Meal?
+    @State private var savingMeal = false
+    @State private var mealName = ""
+    @State private var mealToSave: Meal?
 
     func shift(_ n: Int) { day = Calendar.current.date(byAdding: .day, value: n, to: day) ?? day }
 
@@ -75,6 +78,15 @@ struct TodayView: View {
             ForEach(items) { e in entryRow(e) }
                 .onDelete { offsets in store.remove(offsets.map { items[$0].id }) }
             Button { adding = m } label: { Label("Ajouter", systemImage: "plus.circle.fill") }
+            if !items.isEmpty {
+                Button {
+                    mealToSave = m
+                    mealName = "\(m.title) habituel"
+                    savingMeal = true
+                } label: {
+                    Label("Enregistrer comme repas", systemImage: "bookmark")
+                }
+            }
         } header: {
             mealHeader(m)
         }
@@ -94,6 +106,22 @@ struct TodayView: View {
                 }
             }
             .sheet(item: $adding) { AddFoodView(meal: $0, day: day) }
+            .alert("Enregistrer ce repas", isPresented: $savingMeal) {
+                TextField("Nom du repas", text: $mealName)
+                Button("Enregistrer") {
+                    guard let selectedMeal = mealToSave else { return }
+                    let items = store.list(day, selectedMeal).map {
+                        SavedMealItem(name: $0.name, detail: $0.detail, m: $0.m, source: $0.source)
+                    }
+                    let title = mealName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !title.isEmpty, !items.isEmpty else { return }
+                    store.put(SavedMeal(title: title, items: items))
+                }
+                Button("Annuler", role: .cancel) {}
+            } message: {
+                Text("Le contenu de ce repas sera conservé dans votre bibliothèque et pourra être ajouté en une fois.")
+            }
+
         }
     }
 }

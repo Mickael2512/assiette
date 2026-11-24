@@ -1,17 +1,77 @@
 name: Build IPA
 on:
   workflow_dispatch:
-  push:
+  pull_request:
     branches: [main]
+  push:
+    branches: [main, feature/body-tracking-foundation]
+concurrency:
+  group: assiette-build-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: macos-15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - run: brew install xcodegen
+      - name: Download and bundle official CIQUAL 2025 database
+        run: |
+          python3 -m venv .ci-venv
+          .ci-venv/bin/pip install --disable-pip-version-check openpyxl requests
+          .ci-venv/bin/python - <<'PY'
+          import csv, io, os, requests, time
+          from requests.adapters import HTTPAdapter
+          from urllib3.util.retry import Retry
+          from openpyxl import load_workbook
+
+          session = requests.Session()
+          retry = Retry(total=6, connect=6, read=6, backoff_factor=2,
+                        status_forcelist=[429, 500, 502, 503, 504],
+                        allowed_methods=["GET"])
+          session.mount("https://", HTTPAdapter(max_retries=retry))
+          session.headers.update({"User-Agent": "Assiette-CIQUAL-Bundler/1.0"})
+
+          api = "https://entrepot.recherche.data.gouv.fr/api/datasets/:persistentId/"
+          response = session.get(api, params={"persistentId": "doi:10.57745/RDMHWY"}, timeout=(20, 90))
+          response.raise_for_status()
+          payload = response.json()["data"]["latestVersion"]["files"]
+          match = next((item for item in payload if "Table Ciqual 2025_FR_2025_11_03.xlsx" in item.get("label", "")), None)
+          if not match:
+              raise SystemExit("Official CIQUAL 2025 XLSX not found in the published dataset.")
+          file_id = match["dataFile"]["id"]
+          download_url = f"https://entrepot.recherche.data.gouv.fr/api/access/datafile/{file_id}"
+          download = session.get(download_url, timeout=(30, 180))
+          download.raise_for_status()
+          if len(download.content) < 100_000:
+              raise SystemExit(f"CIQUAL download too small: {len(download.content)} bytes")
+          workbook = load_workbook(io.BytesIO(download.content), read_only=True, data_only=True)
+          sheet = next((s for s in workbook.worksheets if "composition" in s.title.lower()), workbook.worksheets[0])
+          os.makedirs("Resources", exist_ok=True)
+          all_rows = list(sheet.iter_rows(values_only=True))
+          header_index = next((i for i, row in enumerate(all_rows)
+                               if any("alim_nom_fr" in str(value).lower() or "nom français" in str(value).lower()
+                                      for value in row if value is not None)), None)
+          if header_index is None:
+              raise SystemExit(f"CIQUAL column header not found in worksheet: {sheet.title}")
+          data_rows = all_rows[header_index:]
+          with open("Resources/ciqual.csv", "w", encoding="utf-8-sig", newline="") as output:
+              writer = csv.writer(output, delimiter=";")
+              for row in data_rows:
+                  writer.writerow(["" if value is None else value for value in row])
+          if len(data_rows) < 3000 or os.path.getsize("Resources/ciqual.csv") < 100_000:
+              raise SystemExit(f"CIQUAL export is incomplete: {len(data_rows)} rows, {os.path.getsize('Resources/ciqual.csv')} bytes")
+          print(f"Bundled CIQUAL sheet: {sheet.title}, header row {header_index + 1}, {len(data_rows) - 1} foods, {os.path.getsize('Resources/ciqual.csv')} bytes")
+          PY
+      - run: brew install xcodegen librsvg
+      - name: Generate app icon
+        run: |
+          mkdir -p Assets.xcassets/AppIcon.appiconset
+          rsvg-convert -w 1024 -h 1024 Assets.xcassets/AppIcon.appiconset/AppIcon.svg > Assets.xcassets/AppIcon.appiconset/AppIcon.png
+          test -s Assets.xcassets/AppIcon.appiconset/AppIcon.png
       - run: xcodegen generate
       - run: |
-          xcodebuild -project Assiette.xcodeproj -scheme Assiette -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          xcodebuild -project Assiette.xcodeproj -scheme Assiette -configuration Release -sdk iphoneos -derivedDataPath build ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIcons:CFBundlePrimaryIcon" build/Build/Products/Release-iphoneos/Assiette.app/Info.plist
           mkdir Payload
           cp -R build/Build/Products/Release-iphoneos/Assiette.app Payload/
           zip -r Assiette.ipa Payload

@@ -20,7 +20,8 @@ struct RecipeCard: View {
             RecipeImage(data: r.image).frame(maxWidth: .infinity).frame(height: 120).clipped()
             VStack(alignment: .leading, spacing: 4) {
                 Text(r.title).font(.subheadline.weight(.semibold)).lineLimit(2).multilineTextAlignment(.leading)
-                Text("\(Int(r.m.kcal)) kcal · \(r.servings) pers.").font(.caption).foregroundStyle(.secondary)
+                Text(r.m.kcal > 0 ? "\(Int(r.m.kcal)) kcal / portion · \(r.servings) pers." : "Valeurs nutritionnelles à compléter")
+                    .font(.caption).foregroundStyle(.secondary)
             }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Color(.secondarySystemGroupedBackground))
@@ -44,7 +45,7 @@ struct RecipesView: View {
                 Picker("", selection: $filter) { Text("Toutes").tag(0); Text("Déjà cuisinées").tag(1) }
                     .pickerStyle(.segmented).padding(.horizontal)
                 if shown.isEmpty {
-                    ContentUnavailableView("Aucune recette", systemImage: "book.closed", description: Text("Importez un lien, une photo de livre ou demandez une idée avec votre frigo."))
+                    ContentUnavailableView("Aucune recette", systemImage: "book.closed", description: Text("Importez un lien contenant des données structurées ou collez le texte d’une recette."))
                         .padding(.top, 60)
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 14)], spacing: 14) {
@@ -90,11 +91,16 @@ struct RecipeDetail: View {
                 RecipeImage(data: r.image).frame(maxWidth: .infinity).frame(height: 240).clipped()
                     .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
                 Text(r.title).font(.largeTitle.bold())
-                HStack(spacing: 10) {
-                    chip("\(Int(r.m.kcal))", "kcal", .green); chip("\(Int(r.m.p)) g", "protéines", .pink)
-                    chip("\(Int(r.m.l)) g", "lipides", .orange); chip("\(Int(r.m.g)) g", "glucides", .blue)
+                if r.m.kcal > 0 {
+                    HStack(spacing: 10) {
+                        chip("\(Int(r.m.kcal))", "kcal", .green); chip("\(Int(r.m.p)) g", "protéines", .pink)
+                        chip("\(Int(r.m.l)) g", "lipides", .orange); chip("\(Int(r.m.g)) g", "glucides", .blue)
+                    }
+                    Text("Valeurs par portion · \(r.servings) portion\(r.servings > 1 ? "s" : "")").font(.footnote).foregroundStyle(.secondary)
+                } else {
+                    Text("Valeurs nutritionnelles non disponibles. Les ingrédients et étapes sont enregistrés, sans inventer de calories.")
+                        .font(.footnote).foregroundStyle(.secondary)
                 }
-                Text("Valeurs par portion · \(r.servings) portion\(r.servings > 1 ? "s" : "")").font(.footnote).foregroundStyle(.secondary)
                 block("Ingrédients") { ForEach(r.ingredients, id: \.self) { Text("• \($0)") } }
                 block("Préparation") {
                     ForEach(Array(r.steps.enumerated()), id: \.offset) { i, s in
@@ -104,12 +110,17 @@ struct RecipeDetail: View {
                         }
                     }
                 }
-                Menu {
-                    ForEach(Meal.allCases) { m in
-                        Button(m.title, systemImage: m.icon) { store.add(Entry(date: Date(), meal: m, name: r.title, detail: "1 portion", m: r.m, source: "Recette")) }
-                    }
-                } label: { Label("Ajouter au journal", systemImage: "plus.circle.fill").frame(maxWidth: .infinity) }
-                    .buttonStyle(.borderedProminent).controlSize(.large)
+                if r.m.kcal > 0 {
+                    Menu {
+                        ForEach(Meal.allCases) { m in
+                            Button(m.title, systemImage: m.icon) { store.add(Entry(date: Date(), meal: m, name: r.title, detail: "1 portion", m: r.m, source: "Recette")) }
+                        }
+                    } label: { Label("Ajouter au journal", systemImage: "plus.circle.fill").frame(maxWidth: .infinity) }
+                        .buttonStyle(.borderedProminent).controlSize(.large)
+                } else {
+                    Text("Ajout au journal indisponible tant que les valeurs nutritionnelles ne sont pas renseignées.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
                 Button { var x = r; x.cooked += 1; x.lastCooked = Date(); store.put(x) } label: {
                     Label(r.cooked > 0 ? "Cuisinée \(r.cooked) fois" : "Je l’ai cuisinée", systemImage: "checkmark.circle").frame(maxWidth: .infinity)
                 }.buttonStyle(.bordered).controlSize(.large)
@@ -139,86 +150,157 @@ struct ImportView: View {
     @Environment(\.dismiss) var dismiss
     @State private var mode = 0
     @State private var text = ""
-    @State private var meal = Meal.dinner
     @State private var busy = false
     @State private var err = ""
     @State private var photo: PhotosPickerItem?
-    @State private var cam = false
+    @State private var camera = false
+    @State private var parsedFromPhoto = false
+    @State private var photoImageData: Data?
+    @State private var photoServings = 1
 
-    func bookImage(_ img: UIImage) {
-        run {
-            let dto = try await AI.json(RecipeDTO.self, prompt: "Lis la recette sur cette photo de livre. " + Importer.fmt, image: img)
-            try await save(dto, img.resized(900).jpegData(compressionQuality: 0.8), nil)
+    func analyzeRecipePhoto(_ image: UIImage) {
+        busy = true
+        err = ""
+        Task {
+            do {
+                let dto = try await RecipePhotoAI.analyze(image)
+                text = RecipePhotoAI.editableText(dto)
+                photoImageData = image.jpegData(compressionQuality: 0.78)
+                photoServings = max(1, dto.servings ?? 1)
+                mode = 1
+                parsedFromPhoto = true
+            } catch { err = error.localizedDescription }
+            busy = false
         }
     }
 
-    func save(_ d: RecipeDTO, _ img: Data?, _ url: String?) async throws {
-        var d = d
-        if (d.kcal ?? 0) == 0, let ings = d.ingredients, !ings.isEmpty {
-            struct Est: Decodable { var kcal: Double?; var p: Double?; var l: Double?; var g: Double? }
-            let q = "Estime les valeurs nutritionnelles PAR PORTION (\(d.servings ?? 2) portions) de cette recette : " + ings.joined(separator: " ; ") + ". JSON uniquement : {\"kcal\":0,\"p\":0,\"l\":0,\"g\":0}, nombres seuls, jamais 0."
-            if let m = try? await AI.json(Est.self, prompt: q) { d.kcal = m.kcal; d.p = m.p; d.l = m.l; d.g = m.g }
+    func analyzeSelectedPhoto(_ item: PhotosPickerItem?) {
+        guard let item else { return }
+        busy = true
+        err = ""
+        Task {
+            do {
+                guard let data = try await item.loadTransferable(type: Data.self),
+                      let image = UIImage(data: data) else { throw AIError.bad("Photo illisible.") }
+                let dto = try await RecipePhotoAI.analyze(image)
+                text = RecipePhotoAI.editableText(dto)
+                photoImageData = image.jpegData(compressionQuality: 0.78)
+                photoServings = max(1, dto.servings ?? 1)
+                mode = 1
+                parsedFromPhoto = true
+            } catch { err = error.localizedDescription }
+            busy = false
         }
-        guard let t = d.title, !t.isEmpty else { throw AIError.bad(d.error ?? "Recette introuvable. Collez la description du lien.") }
-        store.put(Recipe(title: t, servings: max(1, d.servings ?? 2), ingredients: d.ingredients ?? [], steps: d.steps ?? [],
-                         m: Macros(kcal: d.kcal ?? 0, p: d.p ?? 0, l: d.l ?? 0, g: d.g ?? 0), image: img, url: url))
+    }
+
+    func save(_ dto: RecipeDTO, image: Data?, url: String?) throws {
+        guard let title = dto.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else {
+            throw AIError.bad(dto.error ?? "Titre de recette introuvable.")
+        }
+        guard let ingredients = dto.ingredients, !ingredients.isEmpty else {
+            throw AIError.bad("La recette ne contient pas d’ingrédients exploitables.")
+        }
+        let nutritionComplete = dto.kcal != nil && dto.p != nil && dto.l != nil && dto.g != nil
+        let macros = nutritionComplete
+            ? Macros(kcal: dto.kcal!, p: dto.p!, l: dto.l!, g: dto.g!)
+            : Macros()
+        store.put(Recipe(
+            title: title,
+            servings: max(1, dto.servings ?? 1),
+            ingredients: ingredients,
+            steps: dto.steps ?? [],
+            m: macros,
+            image: image,
+            url: url
+        ))
         dismiss()
     }
-    func run(_ job: @escaping () async throws -> Void) {
-        busy = true; err = ""
-        Task { do { try await job() } catch { err = error.localizedDescription }; busy = false }
-    }
-    func importText() {
-        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        run {
-            if t.lowercased().hasPrefix("http"), !t.contains(" ") {
-                let (d, img) = try await Importer.fromURL(t); try await save(d, img, t)
-            } else { try await save(try await AI.json(RecipeDTO.self, prompt: Importer.prompt(t)), nil, nil) }
+
+    func run(_ operation: @escaping () async throws -> Void) {
+        busy = true
+        err = ""
+        Task {
+            do { try await operation() }
+            catch { err = error.localizedDescription }
+            busy = false
         }
     }
-    func fridge() {
-        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        run { try await save(try await AI.json(RecipeDTO.self, prompt: "Invente une recette de \(meal.title.lowercased()) simple et gourmande avec principalement : \(t). Tu peux ajouter des basiques (huile, sel, épices). " + Importer.fmt), nil, nil) }
-    }
-    func book(_ item: PhotosPickerItem?) {
-        guard let item else { return }
+
+    func importContent() {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return }
         run {
-            guard let d = try await item.loadTransferable(type: Data.self), let img = UIImage(data: d) else { throw AIError.bad("Photo illisible.") }
-            let dto = try await AI.json(RecipeDTO.self, prompt: "Lis la recette sur cette photo de livre. " + Importer.fmt, image: img)
-            try await save(dto, img.resized(900).jpegData(compressionQuality: 0.8), nil)
+            if value.lowercased().hasPrefix("https://") || value.lowercased().hasPrefix("http://") {
+                let (dto, image) = try await Importer.fromURL(value)
+                try save(dto, image: image, url: value)
+            } else {
+                var dto = try Importer.fromText(value)
+                if parsedFromPhoto { dto.servings = photoServings }
+                try save(dto, image: photoImageData, url: nil)
+            }
         }
     }
 
     var body: some View {
         NavigationStack {
             Form {
-                Picker("", selection: $mode) { Text("Lien").tag(0); Text("Photo").tag(1); Text("Frigo").tag(2) }
-                    .pickerStyle(.segmented).listRowBackground(Color.clear)
-                if mode == 0 {
-                    Section {
-                        TextField("Lien ou texte de la recette", text: $text, axis: .vertical).lineLimit(3...8)
-                        Button("Coller depuis le presse-papiers") { text = UIPasteboard.general.string ?? text }
-                        Button("Importer", action: importText).disabled(text.isEmpty || busy)
-                    } footer: { Text("Instagram, TikTok, blogs… Si le lien est bloqué, collez la description de la publication.") }
+                Picker("", selection: $mode) {
+                    Text("Lien").tag(0)
+                    Text("Texte").tag(1)
+                    Text("Photo").tag(2)
                 }
-                if mode == 1 {
-                    PhotosPicker(selection: $photo, matching: .images) { Label("Choisir la photo d’une page de livre", systemImage: "book") }
-                    Button { cam = true } label: { Label("Prendre une photo", systemImage: "camera.fill") }
-                }
-                if mode == 2 {
-                    Section("Ce que vous avez") {
-                        TextField("Ex. poulet, riz, courgettes, crème…", text: $text, axis: .vertical).lineLimit(3...8)
-                        Picker("Repas", selection: $meal) { ForEach(Meal.allCases) { Text($0.title).tag($0) } }
-                        Button("Créer une recette", action: fridge).disabled(text.isEmpty || busy)
+                .pickerStyle(.segmented)
+                .listRowBackground(Color.clear)
+
+                Section {
+                    if mode == 2 {
+                        Button { camera = true } label: { Label("Photographier la recette", systemImage: "camera.fill") }
+                            .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera) || busy)
+                        PhotosPicker(selection: $photo, matching: .images) {
+                            Label("Choisir une photo ou un scan", systemImage: "photo")
+                        }
+                        .disabled(busy)
+                        Text("Assiette lit la page, extrait les ingrédients et les étapes, puis prépare une fiche modifiable. Photographiez la recette entière, bien à plat et avec une bonne lumière.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    } else {
+                        TextField(mode == 0 ? "https://…" : "Nom, ingrédients et préparation…", text: $text, axis: .vertical)
+                            .lineLimit(4...10)
+                        if mode == 0 {
+                            Button("Coller depuis le presse-papiers") { text = UIPasteboard.general.string ?? text }
+                        }
+                        Button(mode == 0 ? "Importer la recette" : "Enregistrer la recette", action: importContent)
+                            .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || busy)
+                    }
+                } header: {
+                    Text(mode == 0 ? "Lien de la recette" : mode == 2 ? "Photo d’une recette" : "Vérifier la recette extraite")
+                } footer: {
+                    if mode == 0 {
+                        Text("Assiette lit les données structurées Recipe (JSON-LD) publiées par le site. Certains sites bloquent l’accès ou ne publient pas ces données.")
+                    } else if mode == 2 {
+                        Text("La reconnaissance de texte est effectuée sur l’iPhone. Le texte extrait est envoyé au service IA Assiette pour structurer la recette. Aucune calorie n’est inventée.")
+                    } else {
+                        Text(parsedFromPhoto ? "Vérifiez et corrigez le titre, les quantités et les étapes avant d’enregistrer." : "Structure attendue : première ligne = titre, puis les sections « Ingrédients » et « Préparation ».")
                     }
                 }
-                if busy { HStack { ProgressView(); Text("L’IA prépare votre recette…").foregroundStyle(.secondary) } }
+
+                if busy {
+                    HStack { ProgressView(); Text(parsedFromPhoto ? "Lecture de la recette…" : "Importation…").foregroundStyle(.secondary) }
+                }
                 if !err.isEmpty { Text(err).foregroundStyle(.red) }
             }
-            .navigationTitle("Nouvelle recette").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Fermer") { dismiss() } } }
-            .onChange(of: photo) { _, item in book(item) }
-            .fullScreenCover(isPresented: $cam) { CameraView { bookImage($0) }.ignoresSafeArea() }
+            .navigationTitle("Nouvelle recette")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Fermer") { dismiss() }
+                }
+            }
+            .onChange(of: photo) { _, item in analyzeSelectedPhoto(item) }
+            .fullScreenCover(isPresented: $camera) {
+                RecipeCameraPicker(onImage: { image in camera = false; analyzeRecipePhoto(image) },
+                                   onCancel: { camera = false })
+                    .ignoresSafeArea()
+            }
         }
     }
 }
