@@ -21,7 +21,7 @@ Réponse JSON : plat, ingrédients, poids estimés, confiance et incertitudes. L
 ## Sécurité et coûts
 
 - La clé Gemini est un secret Worker, jamais un secret client.
-- Limite de taille d'image et nombre maximal d'ingrédients.
+- Limite de taille d'image, nombre maximal d'ingrédients et limitation intégrée à 10 analyses par minute et par adresse IP (rate limit Cloudflare).
 - Avant ouverture publique, activer Cloudflare Rate Limiting/WAF et un budget/alerte côté Google. CORS n'est pas une authentification et une app iOS ne peut pas garder un secret partagé.
 - Le niveau gratuit Gemini dépend du modèle, de la région et des quotas du compte ; il n'est ni illimité ni garanti. Prévoir un plafond et une réponse propre en cas de quota.
 - Ne pas conserver les images ni les journaux contenant des données photo.
