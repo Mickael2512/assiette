@@ -133,6 +133,25 @@ struct Recipe: Codable, Identifiable {
     var created = Date()
 }
 
+struct SavedMealItem: Codable, Identifiable {
+    var id = UUID()
+    var name: String
+    var detail: String
+    var m: Macros
+    var source: String
+}
+
+struct SavedMeal: Codable, Identifiable {
+    var id = UUID()
+    var title: String
+    var items: [SavedMealItem]
+    var created = Date()
+    var total: Macros {
+        guard let first = items.first else { return Macros() }
+        return items.dropFirst().reduce(first.m) { $0 + $1.m }
+    }
+}
+
 struct Cand: Identifiable {
     let id = UUID()
     var name: String
@@ -146,6 +165,7 @@ struct Cand: Identifiable {
 
     var entries: [Entry] = []
     var recipes: [Recipe] = []
+    var savedMeals: [SavedMeal] = []
     var goal = Macros(kcal: 2200, p: 140, l: 70, g: 250)
     var bodyMeasurements: [BodyMeasurement] = []
     var bodyProfile = BodyProfile()
@@ -155,19 +175,21 @@ struct Cand: Identifiable {
         var schemaVersion: Int
         var entries: [Entry]
         var recipes: [Recipe]
+        var savedMeals: [SavedMeal]
         var goal: Macros
         var bodyMeasurements: [BodyMeasurement]
         var bodyProfile: BodyProfile
         var bodyGoals: BodyGoals
 
         private enum CodingKeys: String, CodingKey {
-            case schemaVersion, entries, recipes, goal, bodyMeasurements, bodyProfile, bodyGoals
+            case schemaVersion, entries, recipes, savedMeals, goal, bodyMeasurements, bodyProfile, bodyGoals
         }
 
         init(
             schemaVersion: Int = Store.currentSchemaVersion,
             entries: [Entry],
             recipes: [Recipe],
+            savedMeals: [SavedMeal] = [],
             goal: Macros,
             bodyMeasurements: [BodyMeasurement],
             bodyProfile: BodyProfile,
@@ -176,6 +198,7 @@ struct Cand: Identifiable {
             self.schemaVersion = schemaVersion
             self.entries = entries
             self.recipes = recipes
+            self.savedMeals = savedMeals
             self.goal = goal
             self.bodyMeasurements = bodyMeasurements
             self.bodyProfile = bodyProfile
@@ -188,6 +211,7 @@ struct Cand: Identifiable {
             schemaVersion = try values.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
             entries = try values.decodeIfPresent([Entry].self, forKey: .entries) ?? []
             recipes = try values.decodeIfPresent([Recipe].self, forKey: .recipes) ?? []
+            savedMeals = try values.decodeIfPresent([SavedMeal].self, forKey: .savedMeals) ?? []
             goal = try values.decodeIfPresent(Macros.self, forKey: .goal)
                 ?? Macros(kcal: 2200, p: 140, l: 70, g: 250)
             bodyMeasurements = try values.decodeIfPresent([BodyMeasurement].self, forKey: .bodyMeasurements) ?? []
@@ -205,6 +229,7 @@ struct Cand: Identifiable {
 
         entries = snapshot.entries
         recipes = snapshot.recipes
+        savedMeals = snapshot.savedMeals
         goal = snapshot.goal
         bodyMeasurements = snapshot.bodyMeasurements
         bodyProfile = snapshot.bodyProfile
@@ -219,6 +244,7 @@ struct Cand: Identifiable {
         let snapshot = Snap(
             entries: entries,
             recipes: recipes,
+            savedMeals: savedMeals,
             goal: goal,
             bodyMeasurements: bodyMeasurements,
             bodyProfile: bodyProfile,
@@ -245,6 +271,20 @@ struct Cand: Identifiable {
 
     func remove(_ ids: [UUID]) {
         entries.removeAll { ids.contains($0.id) }
+        save()
+    }
+
+    func put(_ savedMeal: SavedMeal) {
+        if let index = savedMeals.firstIndex(where: { $0.id == savedMeal.id }) {
+            savedMeals[index] = savedMeal
+        } else {
+            savedMeals.insert(savedMeal, at: 0)
+        }
+        save()
+    }
+
+    func dropSavedMeal(_ id: UUID) {
+        savedMeals.removeAll { $0.id == id }
         save()
     }
 
