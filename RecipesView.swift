@@ -155,6 +155,8 @@ struct ImportView: View {
     @State private var photo: PhotosPickerItem?
     @State private var camera = false
     @State private var parsedFromPhoto = false
+    @State private var photoImageData: Data?
+    @State private var photoServings = 1
 
     func analyzeRecipePhoto(_ image: UIImage) {
         busy = true
@@ -163,6 +165,8 @@ struct ImportView: View {
             do {
                 let dto = try await RecipePhotoAI.analyze(image)
                 text = RecipePhotoAI.editableText(dto)
+                photoImageData = image.jpegData(compressionQuality: 0.78)
+                photoServings = max(1, dto.servings ?? 1)
                 mode = 1
                 parsedFromPhoto = true
             } catch { err = error.localizedDescription }
@@ -180,6 +184,8 @@ struct ImportView: View {
                       let image = UIImage(data: data) else { throw AIError.bad("Photo illisible.") }
                 let dto = try await RecipePhotoAI.analyze(image)
                 text = RecipePhotoAI.editableText(dto)
+                photoImageData = image.jpegData(compressionQuality: 0.78)
+                photoServings = max(1, dto.servings ?? 1)
                 mode = 1
                 parsedFromPhoto = true
             } catch { err = error.localizedDescription }
@@ -228,8 +234,9 @@ struct ImportView: View {
                 let (dto, image) = try await Importer.fromURL(value)
                 try save(dto, image: image, url: value)
             } else {
-                let dto = try Importer.fromText(value)
-                try save(dto, image: nil, url: nil)
+                var dto = try Importer.fromText(value)
+                if parsedFromPhoto { dto.servings = photoServings }
+                try save(dto, image: photoImageData, url: nil)
             }
         }
     }
@@ -277,7 +284,7 @@ struct ImportView: View {
                 }
 
                 if busy {
-                    HStack { ProgressView(); Text("Importation locale…").foregroundStyle(.secondary) }
+                    HStack { ProgressView(); Text(parsedFromPhoto ? "Lecture de la recette…" : "Importation…").foregroundStyle(.secondary) }
                 }
                 if !err.isEmpty { Text(err).foregroundStyle(.red) }
             }
